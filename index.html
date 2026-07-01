@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mención Aplauso — Cemaco</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #1a1a1a;
+    }
+
+    /* HERO */
+    .hero {
+      background: linear-gradient(135deg, #0F3B7A 0%, #1a5fa8 100%);
+      color: white;
+      padding: 40px 32px 48px;
+      text-align: center;
+    }
+
+    .hero-logo {
+      width: 72px;
+      height: 72px;
+      background: white;
+      border-radius: 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 40px;
+      margin-bottom: 16px;
+    }
+
+    .hero h1 {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 10px;
+      letter-spacing: -0.5px;
+    }
+
+    .hero p {
+      font-size: 15px;
+      opacity: 0.88;
+      max-width: 420px;
+      margin: 0 auto 28px;
+      line-height: 1.6;
+    }
+
+    .btn-group {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 13px 28px;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.15s, opacity 0.15s;
+      cursor: pointer;
+    }
+
+    .btn:hover { transform: translateY(-1px); opacity: 0.92; }
+
+    .btn-primary {
+      background: #F5A623;
+      color: #1a1a1a;
+    }
+
+    .btn-secondary {
+      background: rgba(255,255,255,0.18);
+      color: white;
+      border: 2px solid rgba(255,255,255,0.5);
+    }
+
+    /* SECTION */
+    .section {
+      padding: 36px 24px;
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .section h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0F3B7A;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    /* VALORES */
+    .valores {
+      background: white;
+      padding: 36px 24px;
+    }
+
+    .valores-inner {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+
+    .valores h2 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #0F3B7A;
+      margin-bottom: 20px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .valor-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+    }
+
+    .valor-card {
+      border-radius: 10px;
+      padding: 16px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .valor-letter {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: 900;
+      color: white;
+      flex-shrink: 0;
+    }
+
+    .valor-text {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.4;
+      color: #333;
+    }
+
+    .c1 .valor-letter { background: #0F3B7A; }
+    .c2 .valor-letter { background: #E8372A; }
+    .c3 .valor-letter { background: #2E9E4F; }
+    .c4 .valor-letter { background: #F5A623; }
+    .c5 .valor-letter { background: #8B2FC9; }
+    .c6 .valor-letter { background: #0095D9; }
+
+    .c1 { background: #EEF3FB; }
+    .c2 { background: #FEF0EF; }
+    .c3 { background: #EDF8F1; }
+    .c4 { background: #FEF8EE; }
+    .c5 { background: #F5EDFC; }
+    .c6 { background: #EAF6FD; }
+
+    /* ACCIONES */
+    .acciones-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .acciones-list li {
+      background: white;
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.5;
+      color: #444;
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .acciones-list li::before {
+      content: '✓';
+      color: #2E9E4F;
+      font-weight: 700;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+
+    /* CTA BOTTOM */
+    .cta-bottom {
+      background: linear-gradient(135deg, #F5A623, #f0911a);
+      padding: 36px 24px;
+      text-align: center;
+    }
+
+    .cta-bottom h2 {
+      font-size: 20px;
+      font-weight: 800;
+      color: #1a1a1a;
+      margin-bottom: 8px;
+    }
+
+    .cta-bottom p {
+      font-size: 14px;
+      color: rgba(0,0,0,0.65);
+      margin-bottom: 20px;
+    }
+
+    .btn-dark {
+      background: #0F3B7A;
+      color: white;
+    }
+
+    /* FOOTER */
+    footer {
+      text-align: center;
+      padding: 20px;
+      font-size: 12px;
+      color: #aaa;
+      background: #f5f5f5;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="hero-logo">👏</div>
+    <h1>Mención Aplauso</h1>
+    <p>Reconoce y agradece a quien vive nuestros valores en el día a día. Una acción alineada a nuestra Brújula CEMACO.</p>
+    <div class="btn-group">
+      <a class="btn btn-primary" href="https://cemaco.sharepoint.com/sites/1.RRHHGENERAL-ScalingUp/_layouts/15/listforms.aspx?cid=MjhlM2E2YzMtYjMwNi00NjM2LWFjMWItODk0M2JkNDhjZTIx&ct=1780931860031&or=Teams-HL&nav=Njc4NDNkYzctMTk3Zi00Yzc2LWJhNDktZGNiODdjNDgxN2Q5" target="_blank">
+        👏 Dar Aplauso
+      </a>
+      <a class="btn btn-secondary" href="https://cemaco.sharepoint.com/sites/Aplausos" target="_blank">
+        ⭐ Reconocer (Gerentes)
+      </a>
+    </div>
+  </div>
+
+  <!-- VALORES -->
+  <div class="valores">
+    <div class="valores-inner">
+      <h2>Los 6 valores de nuestra Brújula</h2>
+      <div class="valor-grid">
+        <div class="valor-card c1">
+          <div class="valor-letter">C</div>
+          <div class="valor-text">Hacemos lo correcto</div>
+        </div>
+        <div class="valor-card c2">
+          <div class="valor-letter">E</div>
+          <div class="valor-text">En equipo ganamos</div>
+        </div>
+        <div class="valor-card c3">
+          <div class="valor-letter">M</div>
+          <div class="valor-text">Mejoramos todo el tiempo</div>
+        </div>
+        <div class="valor-card c4">
+          <div class="valor-letter">A</div>
+          <div class="valor-text">Somos ágiles y apasionados</div>
+        </div>
+        <div class="valor-card c5">
+          <div class="valor-letter">C</div>
+          <div class="valor-text">Cumplimos</div>
+        </div>
+        <div class="valor-card c6">
+          <div class="valor-letter">O</div>
+          <div class="valor-text">Obsesionados por ayudar al cliente</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- QUÉ RECONOCE -->
+  <div class="section">
+    <h2>¿Qué tipo de acciones reconoce?</h2>
+    <ul class="acciones-list">
+      <li>Reflejan claramente uno o más valores de la Brújula CEMACO</li>
+      <li>Generan impacto positivo en clientes, compañeros, equipos, resultados, sostenibilidad y el negocio en general</li>
+      <li>Ocurren en el día a día (no necesariamente extraordinarias, pero sí ejemplares)</li>
+      <li>Pueden incluir menciones de clientes que merecen un aplauso</li>
+    </ul>
+  </div>
+
+  <!-- CTA BOTTOM -->
+  <div class="cta-bottom">
+    <h2>¡Reconoce a alguien hoy!</h2>
+    <p>Agradece en el momento. Una acción pequeña genera un gran impacto.</p>
+    <a class="btn btn-dark" href="https://cemaco.sharepoint.com/sites/1.RRHHGENERAL-ScalingUp/_layouts/15/listforms.aspx?cid=MjhlM2E2YzMtYjMwNi00NjM2LWFjMWItODk0M2JkNDhjZTIx&ct=1780931860031&or=Teams-HL&nav=Njc4NDNkYzctMTk3Zi00Yzc2LWJhNDktZGNiODdjNDgxN2Q5" target="_blank">
+      👏 Dar Aplauso ahora
+    </a>
+  </div>
+
+  <footer>Somos Grupo CEMACO · Programa de Reconocimiento</footer>
+
+</body>
+</html>
