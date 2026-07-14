@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dar Aplauso — Cemaco</title>
+<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background:#f5f5f5;
+    color:#1a1a1a;
+    padding: 24px 16px 60px;
+  }
+  .card {
+    background:white;
+    max-width:520px;
+    margin:0 auto;
+    border-radius:12px;
+    padding:28px 24px;
+    box-shadow:0 2px 12px rgba(0,0,0,0.06);
+  }
+  h1 {
+    font-size:22px;
+    color:#0F3B7A;
+    margin-bottom:6px;
+  }
+  .subtitle {
+    font-size:13px;
+    color:#777;
+    margin-bottom:24px;
+  }
+  label {
+    display:block;
+    font-size:13px;
+    font-weight:700;
+    color:#333;
+    margin-bottom:6px;
+    margin-top:18px;
+  }
+  select, textarea, input[type=text] {
+    width:100%;
+    padding:11px 12px;
+    border:1px solid #ddd;
+    border-radius:8px;
+    font-size:14px;
+    font-family:inherit;
+    background:#fafafa;
+  }
+  textarea { resize:vertical; min-height:90px; }
+  .valores-grid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:8px;
+    margin-top:8px;
+  }
+  .valor-opt {
+    display:flex;
+    align-items:center;
+    gap:8px;
+    background:#f5f5f5;
+    padding:10px;
+    border-radius:8px;
+    font-size:12.5px;
+    cursor:pointer;
+    border:2px solid transparent;
+  }
+  .valor-opt.selected {
+    border-color:#0F3B7A;
+    background:#EEF3FB;
+  }
+  .valor-opt input { width:auto; }
+  #btnSubmit {
+    width:100%;
+    margin-top:26px;
+    background:#0F3B7A;
+    color:white;
+    border:none;
+    padding:14px;
+    border-radius:8px;
+    font-size:15px;
+    font-weight:700;
+    cursor:pointer;
+  }
+  #btnSubmit:disabled { opacity:0.5; cursor:not-allowed; }
+  #status {
+    margin-top:14px;
+    font-size:13px;
+    text-align:center;
+  }
+  .status-ok { color:#2E9E4F; font-weight:700; }
+  .status-err { color:#E8372A; font-weight:700; }
+  #loginScreen {
+    max-width:520px;
+    margin:80px auto;
+    text-align:center;
+  }
+  #loginScreen button {
+    background:#0F3B7A;
+    color:white;
+    border:none;
+    padding:12px 28px;
+    border-radius:8px;
+    font-size:14px;
+    font-weight:700;
+    cursor:pointer;
+    margin-top:16px;
+  }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <h1>👏 Mención Aplauso</h1>
+  <p class="subtitle">Inicia sesión con tu cuenta de Cemaco para continuar</p>
+  <button onclick="login()">Iniciar sesión</button>
+</div>
+
+<div class="card" id="formCard" style="display:none">
+  <h1>👏 Mención Aplauso</h1>
+  <p class="subtitle" id="userGreeting"></p>
+
+  <label>Tienda o Departamento del Reconocido *</label>
+  <select id="departamento">
+    <option value="">Selecciona...</option>
+  </select>
+
+  <label>Nombre del Reconocido *</label>
+  <select id="reconocido" disabled>
+    <option value="">Primero selecciona un departamento</option>
+  </select>
+
+  <label>Valor Observado *</label>
+  <div class="valores-grid" id="valoresGrid"></div>
+
+  <label>¡Gracias por vivir nuestros valores! *</label>
+  <textarea id="motivo" placeholder="Comparte con el homenajeado porqué le entregas este aplauso"></textarea>
+
+  <button id="btnSubmit" onclick="enviarAplauso()">Enviar Aplauso 👏</button>
+  <div id="status"></div>
+</div>
+
+<script>
+// ── Config MSAL ──
+const msalConfig = {
+  auth: {
+    clientId: "8e2a17cb-e0dc-4166-998a-96298e04704e",
+    authority: "https://login.microsoftonline.com/7944ce02-7df9-4a4a-97ac-85a2b2f936cb",
+    redirectUri: "https://jdaetzcemaco.github.io/aplausos/form.html"
+  },
+  cache: { cacheLocation: "sessionStorage" }
+};
+const msalInstance = new msal.PublicClientApplication(msalConfig);
+
+let currentAccount = null;
+let accessToken = null;
+
+// TODO: reemplazar con la lista real de departamentos/tiendas de Cemaco
+const DEPARTAMENTOS = [
+  "Administración",
+  "Presidencia",
+  "Bebé Guarición",
+  "Tomy Herramientas",
+  "Tomy Organización",
+  "Recursos Humanos",
+  "Sistemas",
+  "Mercadeo"
+];
+
+const VALORES = [
+  { key: "Hacemos lo correcto", color: "#0F3B7A" },
+  { key: "En equipo ganamos", color: "#E8372A" },
+  { key: "Mejoramos todo el tiempo", color: "#2E9E4F" },
+  { key: "Somos ágiles y apasionados", color: "#F5A623" },
+  { key: "Cumplimos", color: "#8B2FC9" },
+  { key: "Obsesionados por ayudar al cliente", color: "#0095D9" }
+];
+
+// URL del flujo de Power Automate (HTTP trigger) — se agrega cuando esté listo
+const POWER_AUTOMATE_URL = "PENDIENTE_URL_DEL_FLUJO";
+
+window.onload = async () => {
+  await msalInstance.initialize();
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    currentAccount = accounts[0];
+    await getToken();
+    mostrarFormulario();
+  }
+};
+
+async function login() {
+  try {
+    const result = await msalInstance.loginPopup({
+      scopes: ["User.Read.All"]
+    });
+    currentAccount = result.account;
+    await getToken();
+    mostrarFormulario();
+  } catch (e) {
+    alert("Error al iniciar sesión: " + e.message);
+  }
+}
+
+async function getToken() {
+  const request = {
+    scopes: ["User.Read.All"],
+    account: currentAccount
+  };
+  try {
+    const result = await msalInstance.acquireTokenSilent(request);
+    accessToken = result.accessToken;
+  } catch (e) {
+    const result = await msalInstance.acquireTokenPopup(request);
+    accessToken = result.accessToken;
+  }
+}
+
+function mostrarFormulario() {
+  document.getElementById("loginScreen").style.display = "none";
+  document.getElementById("formCard").style.display = "block";
+  document.getElementById("userGreeting").textContent = "Sesión: " + currentAccount.name;
+
+  const depSelect = document.getElementById("departamento");
+  DEPARTAMENTOS.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    depSelect.appendChild(opt);
+  });
+  depSelect.addEventListener("change", cargarEmpleados);
+
+  const grid = document.getElementById("valoresGrid");
+  VALORES.forEach((v, i) => {
+    const div = document.createElement("div");
+    div.className = "valor-opt";
+    div.innerHTML = `<input type="checkbox" value="${v.key}" id="val${i}"> <label for="val${i}" style="margin:0;font-weight:600;color:${v.color}">${v.key}</label>`;
+    div.onclick = (e) => {
+      if (e.target.tagName !== "INPUT") {
+        const cb = div.querySelector("input");
+        cb.checked = !cb.checked;
+      }
+      div.classList.toggle("selected", div.querySelector("input").checked);
+    };
+    grid.appendChild(div);
+  });
+}
+
+async function cargarEmpleados() {
+  const departamento = document.getElementById("departamento").value;
+  const reconocidoSelect = document.getElementById("reconocido");
+  reconocidoSelect.innerHTML = '<option value="">Cargando...</option>';
+  reconocidoSelect.disabled = true;
+
+  if (!departamento) return;
+
+  try {
+    const filter = encodeURIComponent(`department eq '${departamento}'`);
+    const resp = await fetch(
+      `https://graph.microsoft.com/v1.0/users?$filter=${filter}&$select=displayName,mail&$top=200`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    const data = await resp.json();
+
+    reconocidoSelect.innerHTML = '<option value="">Selecciona...</option>';
+    (data.value || []).forEach(u => {
+      const opt = document.createElement("option");
+      opt.value = u.mail || u.displayName;
+      opt.textContent = u.displayName;
+      reconocidoSelect.appendChild(opt);
+    });
+    reconocidoSelect.disabled = false;
+  } catch (e) {
+    reconocidoSelect.innerHTML = '<option value="">Error al cargar</option>';
+  }
+}
+
+async function enviarAplauso() {
+  const departamento = document.getElementById("departamento").value;
+  const reconocido = document.getElementById("reconocido").value;
+  const valores = Array.from(document.querySelectorAll("#valoresGrid input:checked")).map(i => i.value);
+  const motivo = document.getElementById("motivo").value.trim();
+  const statusDiv = document.getElementById("status");
+
+  if (!departamento || !reconocido || valores.length === 0 || !motivo) {
+    statusDiv.innerHTML = '<span class="status-err">Completa todos los campos</span>';
+    return;
+  }
+
+  const btn = document.getElementById("btnSubmit");
+  btn.disabled = true;
+  statusDiv.textContent = "Enviando...";
+
+  const payload = {
+    DepartamentoDelReconocido: departamento,
+    NombreDelReconocido: reconocido,
+    ValorObservado: valores.join(", "),
+    Motivo: motivo,
+    NombreDeQuienReconoce: currentAccount.name,
+    CorreoDeQuienReconoce: currentAccount.username
+  };
+
+  try {
+    const resp = await fetch(POWER_AUTOMATE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    if (!resp.ok) throw new Error("Error " + resp.status);
+    statusDiv.innerHTML = '<span class="status-ok">¡Aplauso enviado! 👏</span>';
+    document.getElementById("motivo").value = "";
+    document.querySelectorAll("#valoresGrid input").forEach(i => i.checked = false);
+    document.querySelectorAll(".valor-opt").forEach(d => d.classList.remove("selected"));
+  } catch (e) {
+    statusDiv.innerHTML = '<span class="status-err">Error al enviar. Intenta de nuevo.</span>';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
