@@ -49,6 +49,45 @@
     background:#fafafa;
   }
   textarea { resize:vertical; min-height:90px; }
+  .search-wrap { position:relative; }
+  #reconocidoResultados {
+    position:absolute;
+    top:calc(100% + 4px);
+    left:0; right:0;
+    background:white;
+    border:1px solid #ddd;
+    border-radius:8px;
+    max-height:220px;
+    overflow-y:auto;
+    z-index:10;
+    box-shadow:0 4px 14px rgba(0,0,0,0.1);
+    display:none;
+  }
+  #reconocidoResultados.show { display:block; }
+  .resultado-item {
+    padding:10px 12px;
+    cursor:pointer;
+    font-size:13.5px;
+    border-bottom:1px solid #f0f0f0;
+  }
+  .resultado-item:last-child { border-bottom:none; }
+  .resultado-item:hover { background:#EEF3FB; }
+  .resultado-item .dept { color:#999; font-size:11.5px; }
+  #reconocidoSeleccionado {
+    margin-top:8px;
+    background:#EEF3FB;
+    border:1px solid #0F3B7A;
+    border-radius:8px;
+    padding:10px 12px;
+    font-size:13.5px;
+    display:none;
+    align-items:center;
+    justify-content:space-between;
+  }
+  #reconocidoSeleccionado.show { display:flex; }
+  #reconocidoSeleccionado button {
+    background:none; border:none; color:#E8372A; font-weight:700; cursor:pointer; font-size:13px;
+  }
   .valores-grid {
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -121,15 +160,19 @@
   <h1>👏 Mención Aplauso</h1>
   <p class="subtitle" id="userGreeting"></p>
 
-  <label>Tienda o Departamento del Reconocido *</label>
-  <select id="departamento">
-    <option value="">Selecciona...</option>
-  </select>
-
   <label>Nombre del Reconocido *</label>
-  <select id="reconocido" disabled>
-    <option value="">Primero selecciona un departamento</option>
-  </select>
+  <div class="search-wrap">
+    <input type="text" id="reconocidoBusqueda" placeholder="Escribe el nombre (mínimo 3 letras)" autocomplete="off">
+    <div id="reconocidoResultados"></div>
+  </div>
+  <div id="reconocidoSeleccionado">
+    <span id="reconocidoSeleccionadoTexto"></span>
+    <button onclick="limpiarSeleccion()">Quitar</button>
+  </div>
+
+  <label>Tienda o Departamento del Reconocido *</label>
+  <input type="text" id="departamento" placeholder="Ej: Tienda Peri Roosevelt, Admon Recursos Humanos">
+  <p style="font-size:11.5px;color:#999;margin-top:4px">Ayúdanos escribiéndolo igual que en el directorio de la empresa.</p>
 
   <label>Valor Observado *</label>
   <div class="valores-grid" id="valoresGrid"></div>
@@ -165,17 +208,8 @@ function getMsalInstance() {
   return msalInstance;
 }
 
-// TODO: reemplazar con la lista real de departamentos/tiendas de Cemaco
-const DEPARTAMENTOS = [
-  "Administración",
-  "Presidencia",
-  "Bebé Guarición",
-  "Tomy Herramientas",
-  "Tomy Organización",
-  "Recursos Humanos",
-  "Sistemas",
-  "Mercadeo"
-];
+let personaSeleccionada = null;
+let debounceTimer = null;
 
 const VALORES = [
   { key: "Hacemos lo correcto", color: "#0F3B7A" },
@@ -240,14 +274,15 @@ function mostrarFormulario() {
   document.getElementById("formCard").style.display = "block";
   document.getElementById("userGreeting").textContent = "Sesión: " + currentAccount.name;
 
-  const depSelect = document.getElementById("departamento");
-  DEPARTAMENTOS.forEach(d => {
-    const opt = document.createElement("option");
-    opt.value = d;
-    opt.textContent = d;
-    depSelect.appendChild(opt);
+  document.getElementById("reconocidoBusqueda").addEventListener("input", (e) => {
+    clearTimeout(debounceTimer);
+    const texto = e.target.value.trim();
+    if (texto.length < 3) {
+      document.getElementById("reconocidoResultados").classList.remove("show");
+      return;
+    }
+    debounceTimer = setTimeout(() => buscarEmpleados(texto), 300);
   });
-  depSelect.addEventListener("change", cargarEmpleados);
 
   const grid = document.getElementById("valoresGrid");
   VALORES.forEach((v, i) => {
@@ -265,44 +300,67 @@ function mostrarFormulario() {
   });
 }
 
-async function cargarEmpleados() {
-  const departamento = document.getElementById("departamento").value;
-  const reconocidoSelect = document.getElementById("reconocido");
-  reconocidoSelect.innerHTML = '<option value="">Cargando...</option>';
-  reconocidoSelect.disabled = true;
-
-  if (!departamento) return;
+async function buscarEmpleados(texto) {
+  const resultadosDiv = document.getElementById("reconocidoResultados");
+  resultadosDiv.innerHTML = '<div class="resultado-item">Buscando...</div>';
+  resultadosDiv.classList.add("show");
 
   try {
-    const filter = encodeURIComponent(`department eq '${departamento}'`);
+    const search = encodeURIComponent(`"displayName:${texto}"`);
     const resp = await fetch(
-      `https://graph.microsoft.com/v1.0/users?$filter=${filter}&$select=displayName,mail&$top=200`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
+      `https://graph.microsoft.com/v1.0/users?$search=${search}&$select=displayName,mail,department,accountEnabled&$top=15`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          ConsistencyLevel: "eventual"
+        }
+      }
     );
     const data = await resp.json();
+    const usuarios = (data.value || []).filter(u => u.accountEnabled !== false);
 
-    reconocidoSelect.innerHTML = '<option value="">Selecciona...</option>';
-    (data.value || []).forEach(u => {
-      const opt = document.createElement("option");
-      opt.value = u.mail || u.displayName;
-      opt.textContent = u.displayName;
-      reconocidoSelect.appendChild(opt);
+    if (usuarios.length === 0) {
+      resultadosDiv.innerHTML = '<div class="resultado-item">Sin resultados</div>';
+      return;
+    }
+
+    resultadosDiv.innerHTML = "";
+    usuarios.forEach(u => {
+      const item = document.createElement("div");
+      item.className = "resultado-item";
+      item.innerHTML = `${u.displayName}<br><span class="dept">${u.mail || ""} ${u.department ? "· " + u.department : ""}</span>`;
+      item.onclick = () => seleccionarPersona(u);
+      resultadosDiv.appendChild(item);
     });
-    reconocidoSelect.disabled = false;
   } catch (e) {
-    reconocidoSelect.innerHTML = '<option value="">Error al cargar</option>';
+    resultadosDiv.innerHTML = '<div class="resultado-item">Error al buscar</div>';
   }
 }
 
+function seleccionarPersona(u) {
+  personaSeleccionada = u;
+  document.getElementById("reconocidoBusqueda").value = "";
+  document.getElementById("reconocidoResultados").classList.remove("show");
+  document.getElementById("reconocidoSeleccionadoTexto").textContent = `${u.displayName} (${u.mail || "sin correo"})`;
+  document.getElementById("reconocidoSeleccionado").classList.add("show");
+  document.getElementById("reconocidoBusqueda").style.display = "none";
+}
+
+function limpiarSeleccion() {
+  personaSeleccionada = null;
+  document.getElementById("reconocidoSeleccionado").classList.remove("show");
+  document.getElementById("reconocidoBusqueda").style.display = "block";
+  document.getElementById("reconocidoBusqueda").value = "";
+}
+
 async function enviarAplauso() {
-  const departamento = document.getElementById("departamento").value;
-  const reconocido = document.getElementById("reconocido").value;
+  const departamento = document.getElementById("departamento").value.trim();
   const valores = Array.from(document.querySelectorAll("#valoresGrid input:checked")).map(i => i.value);
   const motivo = document.getElementById("motivo").value.trim();
   const statusDiv = document.getElementById("status");
 
-  if (!departamento || !reconocido || valores.length === 0 || !motivo) {
-    statusDiv.innerHTML = '<span class="status-err">Completa todos los campos</span>';
+  if (!personaSeleccionada || !departamento || valores.length === 0 || !motivo) {
+    statusDiv.innerHTML = '<span class="status-err">Completa todos los campos, incluyendo la búsqueda del reconocido</span>';
     return;
   }
 
@@ -312,7 +370,8 @@ async function enviarAplauso() {
 
   const payload = {
     DepartamentoDelReconocido: departamento,
-    NombreDelReconocido: reconocido,
+    NombreDelReconocido: personaSeleccionada.displayName,
+    CorreoDelReconocido: personaSeleccionada.mail,
     ValorObservado: valores.join(", "),
     Motivo: motivo,
     NombreDeQuienReconoce: currentAccount.name,
@@ -328,6 +387,8 @@ async function enviarAplauso() {
     if (!resp.ok) throw new Error("Error " + resp.status);
     statusDiv.innerHTML = '<span class="status-ok">¡Aplauso enviado! 👏</span>';
     document.getElementById("motivo").value = "";
+    document.getElementById("departamento").value = "";
+    limpiarSeleccion();
     document.querySelectorAll("#valoresGrid input").forEach(i => i.checked = false);
     document.querySelectorAll(".valor-opt").forEach(d => d.classList.remove("selected"));
   } catch (e) {
