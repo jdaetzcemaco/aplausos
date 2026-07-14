@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dar Aplauso — Cemaco</title>
-<script src="https://alcdn.msauth.net/browser/2.38.3/js/msal-browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -151,10 +151,19 @@ const msalConfig = {
   },
   cache: { cacheLocation: "sessionStorage" }
 };
-const msalInstance = new msal.PublicClientApplication(msalConfig);
-
 let currentAccount = null;
 let accessToken = null;
+let msalInstance = null;
+
+function getMsalInstance() {
+  if (typeof msal === "undefined") {
+    throw new Error("La librería MSAL no cargó. Verifica tu conexión a internet o si hay un bloqueo de red.");
+  }
+  if (!msalInstance) {
+    msalInstance = new msal.PublicClientApplication(msalConfig);
+  }
+  return msalInstance;
+}
 
 // TODO: reemplazar con la lista real de departamentos/tiendas de Cemaco
 const DEPARTAMENTOS = [
@@ -181,18 +190,26 @@ const VALORES = [
 const POWER_AUTOMATE_URL = "PENDIENTE_URL_DEL_FLUJO";
 
 window.onload = async () => {
-  await msalInstance.initialize();
-  const accounts = msalInstance.getAllAccounts();
-  if (accounts.length > 0) {
-    currentAccount = accounts[0];
-    await getToken();
-    mostrarFormulario();
+  try {
+    const instance = getMsalInstance();
+    await instance.initialize();
+    const accounts = instance.getAllAccounts();
+    if (accounts.length > 0) {
+      currentAccount = accounts[0];
+      await getToken();
+      mostrarFormulario();
+    }
+  } catch (e) {
+    document.getElementById("loginScreen").innerHTML =
+      '<h1>👏 Mención Aplauso</h1><p class="subtitle" style="color:#E8372A">' + e.message + '</p>';
   }
 };
 
 async function login() {
   try {
-    const result = await msalInstance.loginPopup({
+    const instance = getMsalInstance();
+    await instance.initialize();
+    const result = await instance.loginPopup({
       scopes: ["User.Read.All"]
     });
     currentAccount = result.account;
@@ -208,11 +225,12 @@ async function getToken() {
     scopes: ["User.Read.All"],
     account: currentAccount
   };
+  const instance = getMsalInstance();
   try {
-    const result = await msalInstance.acquireTokenSilent(request);
+    const result = await instance.acquireTokenSilent(request);
     accessToken = result.accessToken;
   } catch (e) {
-    const result = await msalInstance.acquireTokenPopup(request);
+    const result = await instance.acquireTokenPopup(request);
     accessToken = result.accessToken;
   }
 }
