@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Debug — Lista de Departamentos</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<style>
+  body { font-family: -apple-system, sans-serif; padding: 24px; max-width: 700px; margin: 0 auto; }
+  button { padding: 10px 20px; background: #0F3B7A; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; margin-bottom: 20px; }
+  #resultado { white-space: pre-wrap; background: #f5f5f5; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 13px; }
+  #status { color: #777; margin-bottom: 10px; }
+</style>
+</head>
+<body>
+<h2>Lista real de Departamentos en Azure AD</h2>
+<button onclick="cargar()">Cargar departamentos únicos</button>
+<div id="status"></div>
+<div id="resultado"></div>
+
+<script>
+const msalConfig = {
+  auth: {
+    clientId: "8e2a17cb-e0dc-4166-998a-96298e04704e",
+    authority: "https://login.microsoftonline.com/7944ce02-7df9-4a4a-97ac-85a2b2f936cb",
+    redirectUri: window.location.href
+  },
+  cache: { cacheLocation: "sessionStorage" }
+};
+let msalInstance = null;
+let accessToken = null;
+
+async function cargar() {
+  const statusDiv = document.getElementById("status");
+  const resultDiv = document.getElementById("resultado");
+  statusDiv.textContent = "Autenticando...";
+
+  msalInstance = new msal.PublicClientApplication(msalConfig);
+  await msalInstance.initialize();
+
+  let account;
+  const accounts = msalInstance.getAllAccounts();
+  if (accounts.length > 0) {
+    account = accounts[0];
+  } else {
+    const result = await msalInstance.loginPopup({ scopes: ["User.Read.All"] });
+    account = result.account;
+  }
+
+  const tokenResult = await msalInstance.acquireTokenSilent({
+    scopes: ["User.Read.All"],
+    account
+  }).catch(() => msalInstance.acquireTokenPopup({ scopes: ["User.Read.All"], account }));
+  accessToken = tokenResult.accessToken;
+
+  statusDiv.textContent = "Consultando usuarios (esto puede tardar unos segundos)...";
+
+  const departamentos = new Map(); // dept -> count
+  let url = "https://graph.microsoft.com/v1.0/users?$select=department&$top=999";
+  let total = 0;
+
+  while (url) {
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+    const data = await resp.json();
+    (data.value || []).forEach(u => {
+      const d = u.department || "(vacío)";
+      departamentos.set(d, (departamentos.get(d) || 0) + 1);
+      total++;
+    });
+    url = data["@odata.nextLink"];
+    statusDiv.textContent = `Usuarios procesados: ${total}...`;
+  }
+
+  const ordenado = Array.from(departamentos.entries()).sort((a, b) => b[1] - a[1]);
+  statusDiv.textContent = `Listo. Total usuarios: ${total}. Departamentos únicos: ${ordenado.length}`;
+  resultDiv.textContent = ordenado.map(([d, c]) => `${c}\t${d}`).join("\n");
+}
+</script>
+</body>
+</html>
