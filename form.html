@@ -170,9 +170,10 @@
     <button onclick="limpiarSeleccion()">Quitar</button>
   </div>
 
-  <label>Tienda o Departamento del Reconocido *</label>
-  <input type="text" id="departamento" placeholder="Ej: Tienda Peri Roosevelt, Admon Recursos Humanos">
-  <p style="font-size:11.5px;color:#999;margin-top:4px">Ayúdanos escribiéndolo igual que en el directorio de la empresa.</p>
+  <label>Departamento del Reconocido *</label>
+  <select id="departamento">
+    <option value="">Selecciona...</option>
+  </select>
 
   <label>Valor Observado *</label>
   <div class="valores-grid" id="valoresGrid"></div>
@@ -210,6 +211,39 @@ function getMsalInstance() {
 
 let personaSeleccionada = null;
 let debounceTimer = null;
+
+const DEPARTAMENTOS = [
+  "Auditoría Interna",
+  "Business Intelligence",
+  "Categorías",
+  "Compras Ferretería",
+  "Compras Hogar",
+  "Compras Qbrands",
+  "Contabilidad",
+  "Contraloría",
+  "Control y Prevención",
+  "Finanzas",
+  "Futuro Verde",
+  "Constru CEMACO",
+  "Importaciones",
+  "Informática",
+  "Informática Desarrollo",
+  "Legal",
+  "Logística",
+  "Mercadeo",
+  "Merchandising",
+  "Operaciones",
+  "Presidencia",
+  "Pricing",
+  "Producto",
+  "Proyecto Mejora Continua",
+  "Proyectos",
+  "Recompra",
+  "Recursos Humanos",
+  "Sostenibilidad",
+  "SAE",
+  "Venta en Línea"
+];
 
 const VALORES = [
   { key: "Hacemos lo correcto", color: "#0F3B7A" },
@@ -283,6 +317,14 @@ function mostrarFormulario() {
       return;
     }
     debounceTimer = setTimeout(() => buscarEmpleados(texto), 300);
+  });
+
+  const depSelect = document.getElementById("departamento");
+  DEPARTAMENTOS.forEach(d => {
+    const opt = document.createElement("option");
+    opt.value = d;
+    opt.textContent = d;
+    depSelect.appendChild(opt);
   });
 
   const grid = document.getElementById("valoresGrid");
