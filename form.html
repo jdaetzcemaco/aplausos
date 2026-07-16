@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Dar Aplauso — Cemaco</title>
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<script src="https://res.cdn.office.net/teams-js/2.19.0/js/MicrosoftTeams.min.js"></script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -258,8 +259,34 @@ const VALORES = [
 const POWER_AUTOMATE_URL = "https://default7944ce027df94a4a97ac85a2b2f936.cb.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/19/workflows/400b225dae0f431da453ccab3f3ed75a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=bzXSEPIBinqg6x69JgQVI9sbpMcxhUzP_SwMYZ2hS20";
 const CLAVE_SECRETA = "aplausos-cemaco-2026";
 
+async function intentarTeamsSSO() {
+  try {
+    if (typeof microsoftTeams === "undefined") return false;
+    await microsoftTeams.app.initialize();
+    const context = await microsoftTeams.app.getContext();
+    const loginHint = context.user && context.user.userPrincipalName;
+    if (!loginHint) return false;
+
+    const instance = getMsalInstance();
+    await instance.initialize();
+    const result = await instance.ssoSilent({
+      scopes: ["User.Read.All"],
+      loginHint: loginHint
+    });
+    currentAccount = result.account;
+    accessToken = result.accessToken;
+    mostrarFormulario();
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 window.onload = async () => {
   try {
+    const ssoOk = await intentarTeamsSSO();
+    if (ssoOk) return;
+
     const instance = getMsalInstance();
     await instance.initialize();
     const accounts = instance.getAllAccounts();
@@ -278,14 +305,12 @@ async function login() {
   try {
     const instance = getMsalInstance();
     await instance.initialize();
-    const result = await instance.loginPopup({
-      scopes: ["User.Read.All"]
-    });
+    const result = await instance.loginPopup({ scopes: ["User.Read.All"] });
     currentAccount = result.account;
     await getToken();
     mostrarFormulario();
   } catch (e) {
-    alert("Error al iniciar sesión: " + e.message);
+    alert("Error al iniciar sesión: " + e.message + ". Si estás en Teams de escritorio, intenta abrir el formulario en tu navegador normal.");
   }
 }
 
