@@ -221,7 +221,8 @@ const VALORES = [
 ];
 
 // URL del flujo de Power Automate (HTTP trigger) — se agrega cuando esté listo
-const POWER_AUTOMATE_URL = "PENDIENTE_URL_DEL_FLUJO";
+const POWER_AUTOMATE_URL = "https://default7944ce027df94a4a97ac85a2b2f936.cb.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/19/workflows/400b225dae0f431da453ccab3f3ed75a/triggers/manual/paths/invoke?api-version=1";
+const CLAVE_SECRETA = "aplausos-cemaco-2026";
 
 window.onload = async () => {
   try {
@@ -369,6 +370,7 @@ async function enviarAplauso() {
   statusDiv.textContent = "Enviando...";
 
   const payload = {
+    clave: CLAVE_SECRETA,
     DepartamentoDelReconocido: departamento,
     NombreDelReconocido: personaSeleccionada.displayName,
     CorreoDelReconocido: personaSeleccionada.mail,
