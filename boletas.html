@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Registrar Boletas — Mención Aplauso</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background:#F4F6FC; color:#1a1a1a;
+    padding:20px 14px 60px;
+  }
+  .card {
+    background:white; max-width:480px; margin:0 auto;
+    border-radius:14px; padding:26px 20px;
+    box-shadow:0 2px 14px rgba(16,30,142,.08);
+  }
+  h1 { font-size:20px; color:#101E8E; margin-bottom:4px; }
+  .subtitle { font-size:13px; color:#777; margin-bottom:20px; }
+
+  .btn {
+    display:block; width:100%; padding:15px; border:none; border-radius:9px;
+    font-size:15.5px; font-weight:700; cursor:pointer; text-align:center;
+  }
+  .btn-primary { background:#94D500; color:#101E8E; }
+  .btn-blue { background:#101E8E; color:white; margin-top:12px; }
+  .btn-ghost { background:#EDF0FA; color:#101E8E; margin-top:10px; }
+  .btn:disabled { opacity:.5; cursor:not-allowed; }
+
+  #preview { width:100%; border-radius:10px; margin:16px 0 4px; display:none; }
+
+  .spinner {
+    display:none; text-align:center; padding:26px 0; color:#101E8E; font-weight:600; font-size:14px;
+  }
+  .spinner::before {
+    content:''; display:block; width:36px; height:36px; margin:0 auto 12px;
+    border:4px solid #EDF0FA; border-top-color:#94D500; border-radius:50%;
+    animation:spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+
+  /* Confirmación */
+  #confirmar { display:none; }
+  label { display:block; font-size:12.5px; font-weight:700; color:#333; margin:14px 0 5px; }
+  input[type=text], textarea {
+    width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px;
+    font-size:14px; font-family:inherit; background:#fafafa;
+  }
+  textarea { resize:vertical; min-height:70px; }
+
+  .match-box {
+    border-radius:10px; padding:12px 14px; font-size:13.5px; margin-top:6px; line-height:1.5;
+  }
+  .match-ok { background:#F0F9E0; border:1.5px solid #94D500; color:#3a5c00; }
+  .match-warn { background:#FFF3E8; border:1.5px solid #FF6400; color:#9c3d00; }
+
+  .valores-grid { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin-top:6px; }
+  .valor-opt {
+    display:flex; align-items:center; gap:7px; background:#f5f5f5;
+    padding:9px 10px; border-radius:8px; font-size:11.5px; font-weight:600;
+    cursor:pointer; border:2px solid transparent; color:#333;
+  }
+  .valor-opt.selected { border-color:#101E8E; background:#EDF0FA; }
+  .valor-opt input { width:auto; }
+
+  #status { margin-top:14px; font-size:13.5px; text-align:center; font-weight:700; }
+  .ok { color:#5a8f00; }
+  .err { color:#E8372A; }
+
+  #exito { display:none; text-align:center; padding:30px 0; }
+  #exito .emoji { font-size:56px; margin-bottom:12px; }
+  #exito h2 { font-size:19px; color:#101E8E; margin-bottom:6px; }
+  #exito p { font-size:13.5px; color:#666; margin-bottom:24px; }
+</style>
+</head>
+<body>
+
+<div class="card">
+  <!-- PASO 1: CAPTURA -->
+  <div id="captura">
+    <h1>👏 Registrar Boleta</h1>
+    <p class="subtitle">Toma una foto clara de UNA boleta a la vez. La leeremos automáticamente.</p>
+    <input type="file" id="fotoInput" accept="image/*" capture="environment" style="display:none">
+    <button class="btn btn-primary" onclick="document.getElementById('fotoInput').click()">📷 Tomar foto de la boleta</button>
+    <img id="preview" alt="Vista previa de la boleta">
+    <button class="btn btn-blue" id="btnAnalizar" onclick="analizar()" style="display:none">Leer boleta ➜</button>
+  </div>
+
+  <!-- SPINNER -->
+  <div class="spinner" id="spinner">Leyendo la boleta...</div>
+
+  <!-- PASO 2: CONFIRMACIÓN -->
+  <div id="confirmar">
+    <h1>Revisa y confirma</h1>
+    <p class="subtitle">Corrige lo que haga falta antes de guardar.</p>
+
+    <label>Nombre del Reconocido</label>
+    <input type="text" id="cNombre">
+    <div id="matchBox" class="match-box match-warn"></div>
+
+    <label>Tienda o Departamento</label>
+    <input type="text" id="cTienda">
+
+    <label>Número de boleta</label>
+    <input type="text" id="cNumero">
+
+    <label>Valores observados</label>
+    <div class="valores-grid" id="cValores"></div>
+
+    <label>Motivo</label>
+    <textarea id="cMotivo"></textarea>
+
+    <label>Nombre de quien reconoce</label>
+    <input type="text" id="cReconocedor">
+
+    <button class="btn btn-primary" id="btnGuardar" onclick="guardar()" style="margin-top:22px">✓ Confirmar y guardar</button>
+    <button class="btn btn-ghost" onclick="reiniciar()">Cancelar</button>
+    <div id="status"></div>
+  </div>
+
+  <!-- ÉXITO -->
+  <div id="exito">
+    <div class="emoji">🎉</div>
+    <h2>¡Boleta registrada!</h2>
+    <p id="exitoDetalle"></p>
+    <button class="btn btn-primary" onclick="reiniciar()">📷 Registrar otra boleta</button>
+  </div>
+</div>
+
+<script>
+const WEBHOOK = "https://jcdcemaco.app.n8n.cloud/webhook/boletas-aplausos";
+const CLAVE = "boletas-cemaco-2026";
+const VALORES = [
+  "Hacemos lo correcto",
+  "En equipo ganamos",
+  "Mejoramos todo el tiempo",
+  "Somos agiles y apasionados",
+  "Cumplimos",
+  "Obsesionados por ayudar al cliente"
+];
+
+let imagenBase64 = null;
+let datosAnalisis = null;
+
+document.getElementById("fotoInput").addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    const img = new Image();
+    img.onload = () => {
+      // Reducir a máx 1600px de lado mayor y comprimir a JPEG
+      const canvas = document.createElement("canvas");
+      const scale = Math.min(1, 1600 / Math.max(img.width, img.height));
+      canvas.width = Math.round(img.width * scale);
+      canvas.height = Math.round(img.height * scale);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      imagenBase64 = dataUrl.split(",")[1];
+      const preview = document.getElementById("preview");
+      preview.src = dataUrl;
+      preview.style.display = "block";
+      document.getElementById("btnAnalizar").style.display = "block";
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+});
+
+async function analizar() {
+  document.getElementById("captura").style.display = "none";
+  document.getElementById("spinner").style.display = "block";
+  try {
+    const resp = await fetch(WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ clave: CLAVE, imagenBase64 })
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const data = await resp.json();
+    datosAnalisis = data.datos;
+    mostrarConfirmacion(datosAnalisis);
+  } catch (e) {
+    alert("No se pudo leer la boleta. Revisa tu conexión e intenta de nuevo.");
+    reiniciar();
+  }
+}
+
+function mostrarConfirmacion(d) {
+  document.getElementById("spinner").style.display = "none";
+  document.getElementById("confirmar").style.display = "block";
+
+  document.getElementById("cNombre").value = d.nombre_reconocido || "";
+  document.getElementById("cTienda").value = d.tienda_departamento || "";
+  document.getElementById("cNumero").value = d.numero_boleta || "";
+  document.getElementById("cMotivo").value = d.motivo || "";
+  document.getElementById("cReconocedor").value = d.nombre_reconocedor || "";
+
+  const mb = document.getElementById("matchBox");
+  if (d.codigo_empleado) {
+    mb.className = "match-box match-ok";
+    mb.innerHTML = "✓ Encontrado en el sistema: <b>" + d.nombre_empleado_encontrado + "</b><br>Código: <b>" + d.codigo_empleado + "</b> · " + (d.ubicacion_empleado || "");
+  } else {
+    mb.className = "match-box match-warn";
+    mb.innerHTML = "⚠️ No se encontró en el listado de empleados. Verifica el nombre — la boleta se guardará sin código de empleado.";
+  }
+
+  const grid = document.getElementById("cValores");
+  grid.innerHTML = "";
+  const marcados = Array.isArray(d.valor_observado) ? d.valor_observado : (d.valor_observado ? [d.valor_observado] : []);
+  const marcadosNorm = marcados.map(v => v.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, ""));
+  VALORES.forEach((v, i) => {
+    const checked = marcadosNorm.some(m => m.includes(v.toLowerCase().substring(0, 8)));
+    const div = document.createElement("div");
+    div.className = "valor-opt" + (checked ? " selected" : "");
+    div.innerHTML = '<input type="checkbox" value="' + v + '" ' + (checked ? "checked" : "") + '> ' + v;
+    div.onclick = (e) => {
+      if (e.target.tagName !== "INPUT") {
+        const cb = div.querySelector("input");
+        cb.checked = !cb.checked;
+      }
+      div.classList.toggle("selected", div.querySelector("input").checked);
+    };
+    grid.appendChild(div);
+  });
+}
+
+async function guardar() {
+  const btn = document.getElementById("btnGuardar");
+  const statusDiv = document.getElementById("status");
+  const valores = Array.from(document.querySelectorAll("#cValores input:checked")).map(i => i.value);
+  const nombre = document.getElementById("cNombre").value.trim();
+
+  if (!nombre) { statusDiv.innerHTML = '<span class="err">El nombre es obligatorio</span>'; return; }
+  if (valores.length === 0) { statusDiv.innerHTML = '<span class="err">Marca al menos un valor</span>'; return; }
+
+  btn.disabled = true;
+  statusDiv.textContent = "Guardando...";
+
+  try {
+    const resp = await fetch(WEBHOOK, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        clave: CLAVE,
+        modo: "guardar",
+        numero_boleta: document.getElementById("cNumero").value.trim(),
+        nombre_reconocido: nombre,
+        codigo_empleado: (nombre === (datosAnalisis.nombre_reconocido || "")) ? datosAnalisis.codigo_empleado : null,
+        tienda_departamento: document.getElementById("cTienda").value.trim(),
+        valor_observado: valores,
+        motivo: document.getElementById("cMotivo").value.trim(),
+        nombre_reconocedor: document.getElementById("cReconocedor").value.trim()
+      })
+    });
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    document.getElementById("confirmar").style.display = "none";
+    document.getElementById("exito").style.display = "block";
+    document.getElementById("exitoDetalle").textContent = nombre + (datosAnalisis.codigo_empleado ? " · Código " + datosAnalisis.codigo_empleado : "");
+  } catch (e) {
+    statusDiv.innerHTML = '<span class="err">Error al guardar. Intenta de nuevo.</span>';
+    btn.disabled = false;
+  }
+}
+
+function reiniciar() {
+  imagenBase64 = null;
+  datosAnalisis = null;
+  document.getElementById("fotoInput").value = "";
+  document.getElementById("preview").style.display = "none";
+  document.getElementById("btnAnalizar").style.display = "none";
+  document.getElementById("spinner").style.display = "none";
+  document.getElementById("confirmar").style.display = "none";
+  document.getElementById("exito").style.display = "none";
+  document.getElementById("status").textContent = "";
+  document.getElementById("btnGuardar").disabled = false;
+  document.getElementById("captura").style.display = "block";
+}
+</script>
+</body>
+</html>
