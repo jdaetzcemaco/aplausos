@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Iniciando sesión — Cemaco</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<script src="https://res.cdn.office.net/teams-js/2.19.0/js/MicrosoftTeams.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background:#F4F6FC; color:#101E8E;
+    display:flex; align-items:center; justify-content:center;
+    min-height:100vh; padding:24px; text-align:center;
+  }
+  .spinner {
+    width:40px; height:40px; margin:0 auto 16px;
+    border:4px solid #EDF0FA; border-top-color:#94D500; border-radius:50%;
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  p { font-size:14px; font-weight:600; }
+  .err { color:#E8372A; font-weight:700; font-size:13.5px; }
+</style>
+</head>
+<body>
+<div>
+  <div class="spinner" id="spinner"></div>
+  <p id="msg">Iniciando sesión con tu cuenta de Cemaco...</p>
+</div>
+
+<script>
+const msalConfig = {
+  auth: {
+    clientId: "8e2a17cb-e0dc-4166-998a-96298e04704e",
+    authority: "https://login.microsoftonline.com/7944ce02-7df9-4a4a-97ac-85a2b2f936cb",
+    redirectUri: "https://jdaetzcemaco.github.io/aplausos/auth.html",
+    navigateToLoginRequestUrl: false
+  },
+  // localStorage para que el token quede disponible en la pestaña principal
+  cache: { cacheLocation: "localStorage" }
+};
+
+function fallar(mensaje) {
+  document.getElementById("spinner").style.display = "none";
+  document.getElementById("msg").className = "err";
+  document.getElementById("msg").textContent = mensaje;
+  try { microsoftTeams.authentication.notifyFailure(mensaje); } catch (e) {}
+}
+
+(async () => {
+  try {
+    // Inicializar Teams SDK si estamos dentro de la ventana de Teams
+    try { await microsoftTeams.app.initialize(); } catch (e) { /* fuera de Teams, seguimos */ }
+
+    const instance = new msal.PublicClientApplication(msalConfig);
+    await instance.initialize();
+
+    const resultado = await instance.handleRedirectPromise();
+
+    if (resultado) {
+      // Regresamos del login de Microsoft con éxito
+      try {
+        microsoftTeams.authentication.notifySuccess(resultado.account.username);
+      } catch (e) {
+        // Fuera de Teams: cerrar la ventana si es un popup normal
+        document.getElementById("msg").textContent = "Sesión iniciada. Puedes cerrar esta ventana.";
+        document.getElementById("spinner").style.display = "none";
+      }
+      return;
+    }
+
+    // Primera carga: mandar al login de Microsoft (redirect, no popup anidado)
+    await instance.loginRedirect({
+      scopes: ["User.Read.All"],
+      prompt: "select_account"
+    });
+  } catch (e) {
+    fallar("No se pudo iniciar sesión: " + (e.message || e));
+  }
+})();
+</script>
+</body>
+</html>

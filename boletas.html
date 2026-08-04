@@ -197,6 +197,17 @@ function mostrarConfirmacion(d) {
   document.getElementById("cMotivo").value = d.motivo || "";
   document.getElementById("cReconocedor").value = d.nombre_reconocedor || "";
 
+  const avisoExistente = document.getElementById("avisoConfianza");
+  if (avisoExistente) avisoExistente.remove();
+  if (d.confianza === "baja" || d.confianza === "media") {
+    const aviso = document.createElement("div");
+    aviso.id = "avisoConfianza";
+    aviso.className = "match-box match-warn";
+    aviso.style.marginBottom = "4px";
+    aviso.innerHTML = "⚠️ La foto es difícil de leer (confianza " + d.confianza + "). Revisa cada campo con cuidado — o cancela y toma una foto más clara, con buena luz y la boleta plana.";
+    document.querySelector("#confirmar .subtitle").after(aviso);
+  }
+
   const mb = document.getElementById("matchBox");
   if (d.codigo_empleado) {
     mb.className = "match-box match-ok";

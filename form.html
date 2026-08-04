@@ -24,7 +24,7 @@
   }
   h1 {
     font-size:22px;
-    color:#0F3B7A;
+    color:#101E8E;
     margin-bottom:6px;
   }
   .subtitle {
@@ -77,7 +77,7 @@
   #reconocidoSeleccionado {
     margin-top:8px;
     background:#EEF3FB;
-    border:1px solid #0F3B7A;
+    border:1px solid #101E8E;
     border-radius:8px;
     padding:10px 12px;
     font-size:13.5px;
@@ -107,14 +107,14 @@
     border:2px solid transparent;
   }
   .valor-opt.selected {
-    border-color:#0F3B7A;
+    border-color:#101E8E;
     background:#EEF3FB;
   }
   .valor-opt input { width:auto; }
   #btnSubmit {
     width:100%;
     margin-top:26px;
-    background:#0F3B7A;
+    background:#101E8E;
     color:white;
     border:none;
     padding:14px;
@@ -137,7 +137,7 @@
     text-align:center;
   }
   #loginScreen button {
-    background:#0F3B7A;
+    background:#101E8E;
     color:white;
     border:none;
     padding:12px 28px;
@@ -194,11 +194,14 @@ const msalConfig = {
     authority: "https://login.microsoftonline.com/7944ce02-7df9-4a4a-97ac-85a2b2f936cb",
     redirectUri: "https://jdaetzcemaco.github.io/aplausos/form.html"
   },
-  cache: { cacheLocation: "sessionStorage" }
+  // localStorage: permite que el token obtenido en auth.html (ventana de Teams)
+  // esté disponible aquí, en la pestaña principal
+  cache: { cacheLocation: "localStorage" }
 };
 let currentAccount = null;
 let accessToken = null;
 let msalInstance = null;
+let dentroDeTeams = false;
 
 function getMsalInstance() {
   if (typeof msal === "undefined") {
@@ -247,7 +250,7 @@ const DEPARTAMENTOS = [
 ];
 
 const VALORES = [
-  { key: "Hacemos lo correcto", color: "#0F3B7A" },
+  { key: "Hacemos lo correcto", color: "#101E8E" },
   { key: "En equipo ganamos", color: "#E8372A" },
   { key: "Mejoramos todo el tiempo", color: "#2E9E4F" },
   { key: "Somos ágiles y apasionados", color: "#F5A623" },
@@ -259,21 +262,18 @@ const VALORES = [
 const POWER_AUTOMATE_URL = "https://default7944ce027df94a4a97ac85a2b2f936.cb.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/19/workflows/400b225dae0f431da453ccab3f3ed75a/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=bzXSEPIBinqg6x69JgQVI9sbpMcxhUzP_SwMYZ2hS20";
 const CLAVE_SECRETA = "aplausos-cemaco-2026";
 
-async function intentarTeamsSSO() {
+// Intenta reusar una sesión ya existente (localStorage) sin molestar al usuario
+async function intentarSesionExistente() {
   try {
-    if (typeof microsoftTeams === "undefined") return false;
-    await microsoftTeams.app.initialize();
-    const context = await microsoftTeams.app.getContext();
-    const loginHint = context.user && context.user.userPrincipalName;
-    if (!loginHint) return false;
-
     const instance = getMsalInstance();
     await instance.initialize();
-    const result = await instance.ssoSilent({
+    const accounts = instance.getAllAccounts();
+    if (accounts.length === 0) return false;
+    currentAccount = accounts[0];
+    const result = await instance.acquireTokenSilent({
       scopes: ["User.Read.All"],
-      loginHint: loginHint
+      account: currentAccount
     });
-    currentAccount = result.account;
     accessToken = result.accessToken;
     mostrarFormulario();
     return true;
@@ -284,16 +284,27 @@ async function intentarTeamsSSO() {
 
 window.onload = async () => {
   try {
-    const ssoOk = await intentarTeamsSSO();
-    if (ssoOk) return;
+    // Detectar si realmente estamos dentro de Teams
+    if (typeof microsoftTeams !== "undefined") {
+      try {
+        await microsoftTeams.app.initialize();
+        await microsoftTeams.app.getContext();
+        dentroDeTeams = true;
+      } catch (e) {
+        dentroDeTeams = false;
+      }
+    }
 
-    const instance = getMsalInstance();
-    await instance.initialize();
-    const accounts = instance.getAllAccounts();
-    if (accounts.length > 0) {
-      currentAccount = accounts[0];
-      await getToken();
-      mostrarFormulario();
+    // Si ya hay sesión guardada, entrar directo sin pedir nada
+    if (await intentarSesionExistente()) return;
+
+    // Dentro de Teams: lanzar el login por la ventana de Teams automáticamente
+    if (dentroDeTeams) {
+      try {
+        await loginConTeams();
+      } catch (e) {
+        // Si el usuario cierra la ventana o falla, queda el botón manual
+      }
     }
   } catch (e) {
     document.getElementById("loginScreen").innerHTML =
@@ -301,8 +312,30 @@ window.onload = async () => {
   }
 };
 
+async function loginConTeams() {
+  // Teams abre esta ventana él mismo — no es un popup del navegador, así que no lo bloquea
+  await microsoftTeams.authentication.authenticate({
+    url: "https://jdaetzcemaco.github.io/aplausos/auth.html",
+    width: 600,
+    height: 600
+  });
+
+  // auth.html dejó la cuenta y el token en localStorage (cache compartido)
+  const instance = getMsalInstance();
+  await instance.initialize();
+  const accounts = instance.getAllAccounts();
+  if (accounts.length === 0) throw new Error("No se recibió la sesión desde Teams.");
+  currentAccount = accounts[0];
+  await getToken();
+  mostrarFormulario();
+}
+
 async function login() {
   try {
+    if (dentroDeTeams) {
+      await loginConTeams();
+      return;
+    }
     const instance = getMsalInstance();
     await instance.initialize();
     const result = await instance.loginPopup({ scopes: ["User.Read.All"] });
@@ -310,7 +343,7 @@ async function login() {
     await getToken();
     mostrarFormulario();
   } catch (e) {
-    alert("Error al iniciar sesión: " + e.message + ". Si estás en Teams de escritorio, intenta abrir el formulario en tu navegador normal.");
+    alert("No se pudo iniciar sesión: " + e.message);
   }
 }
 
