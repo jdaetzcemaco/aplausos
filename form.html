@@ -6,6 +6,19 @@
 <title>Dar Aplauso — Cemaco</title>
 <script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
 <script src="https://res.cdn.office.net/teams-js/2.19.0/js/MicrosoftTeams.min.js"></script>
+<script>
+// Respaldo: si el CDN de Microsoft está bloqueado por la red, cargar el SDK de Teams desde jsDelivr
+function cargarTeamsSDK() {
+  return new Promise((resolve) => {
+    if (typeof microsoftTeams !== "undefined") return resolve(true);
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/@microsoft/teams-js@2.19.0/dist/MicrosoftTeams.min.js";
+    s.onload = () => resolve(typeof microsoftTeams !== "undefined");
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+</script>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; }
   body {
@@ -155,6 +168,13 @@
   <h1>👏 Mención Aplauso</h1>
   <p class="subtitle">Inicia sesión con tu cuenta de Cemaco para continuar</p>
   <button onclick="login()">Iniciar sesión</button>
+  <p id="loginError" style="display:none; color:#E8372A; font-size:13px; font-weight:600; margin-top:14px; line-height:1.5"></p>
+  <p style="margin-top:18px; font-size:12.5px; color:#999">
+    ¿No abre la ventana de inicio de sesión?<br>
+    <a id="linkNavegador" href="https://jdaetzcemaco.github.io/aplausos/form.html" target="_blank" rel="noopener"
+       style="color:#101E8E; font-weight:700">Abrir el formulario en el navegador</a>
+  </p>
+  <p id="diag" style="margin-top:14px; font-size:11px; color:#bbb"></p>
 </div>
 
 <div class="card" id="formCard" style="display:none">
@@ -282,18 +302,33 @@ async function intentarSesionExistente() {
   }
 }
 
+function mostrarErrorLogin(mensaje) {
+  const el = document.getElementById("loginError");
+  el.style.display = "block";
+  el.textContent = mensaje;
+}
+
+function setDiag(texto) {
+  document.getElementById("diag").textContent = texto;
+}
+
 window.onload = async () => {
   try {
+    // Cargar el SDK de Teams (con CDN de respaldo si el principal está bloqueado)
+    const sdkOk = await cargarTeamsSDK();
+
     // Detectar si realmente estamos dentro de Teams
-    if (typeof microsoftTeams !== "undefined") {
+    let motivoNoTeams = sdkOk ? "" : "SDK de Teams no cargó (red bloqueada)";
+    if (sdkOk) {
       try {
         await microsoftTeams.app.initialize();
         await microsoftTeams.app.getContext();
         dentroDeTeams = true;
       } catch (e) {
-        dentroDeTeams = false;
+        motivoNoTeams = "no se pudo inicializar Teams: " + (e.message || e);
       }
     }
+    setDiag(dentroDeTeams ? "Modo Teams" : "Modo navegador · " + motivoNoTeams);
 
     // Si ya hay sesión guardada, entrar directo sin pedir nada
     if (await intentarSesionExistente()) return;
@@ -303,12 +338,11 @@ window.onload = async () => {
       try {
         await loginConTeams();
       } catch (e) {
-        // Si el usuario cierra la ventana o falla, queda el botón manual
+        mostrarErrorLogin("No se completó el inicio de sesión: " + (e.message || e) + ". Vuelve a intentar con el botón.");
       }
     }
   } catch (e) {
-    document.getElementById("loginScreen").innerHTML =
-      '<h1>👏 Mención Aplauso</h1><p class="subtitle" style="color:#E8372A">' + e.message + '</p>';
+    mostrarErrorLogin("Error al preparar el inicio de sesión: " + (e.message || e));
   }
 };
 
@@ -331,11 +365,22 @@ async function loginConTeams() {
 }
 
 async function login() {
-  try {
-    if (dentroDeTeams) {
+  document.getElementById("loginError").style.display = "none";
+
+  // Si el SDK de Teams está disponible, usar su ventana de autenticación
+  // (Teams bloquea los popups normales del navegador)
+  if (typeof microsoftTeams !== "undefined") {
+    try {
       await loginConTeams();
       return;
+    } catch (e) {
+      mostrarErrorLogin("La ventana de Teams no completó el inicio de sesión (" + (e.message || e) + "). Usa el enlace de abajo para abrirlo en el navegador.");
+      return;
     }
+  }
+
+  // Fuera de Teams: popup normal del navegador
+  try {
     const instance = getMsalInstance();
     await instance.initialize();
     const result = await instance.loginPopup({ scopes: ["User.Read.All"] });
@@ -343,7 +388,7 @@ async function login() {
     await getToken();
     mostrarFormulario();
   } catch (e) {
-    alert("No se pudo iniciar sesión: " + e.message);
+    mostrarErrorLogin("No se pudo iniciar sesión: " + (e.message || e) + ". Usa el enlace de abajo para abrirlo en el navegador.");
   }
 }
 
