@@ -169,12 +169,14 @@ function cargarTeamsSDK() {
   <p class="subtitle">Inicia sesión con tu cuenta de Cemaco para continuar</p>
   <button onclick="login()">Iniciar sesión</button>
   <p id="loginError" style="display:none; color:#E8372A; font-size:13px; font-weight:600; margin-top:14px; line-height:1.5"></p>
-  <p style="margin-top:18px; font-size:12.5px; color:#999">
+  <!-- Salida de emergencia: oculta por defecto, solo se muestra si el login falla DENTRO de Teams.
+       Se esconde para que nadie la toque por error: abrirla saca al usuario de Teams. -->
+  <p id="bloqueEscape" style="display:none; margin-top:18px; font-size:12.5px; color:#999">
     ¿No abre la ventana de inicio de sesión?<br>
     <a id="linkNavegador" href="https://jdaetzcemaco.github.io/aplausos/form.html" target="_blank" rel="noopener"
        style="color:#101E8E; font-weight:700">Abrir el formulario en el navegador</a>
   </p>
-  <p id="diag" style="margin-top:14px; font-size:11px; color:#bbb"></p>
+  <p id="diag" style="display:none; margin-top:14px; font-size:11px; color:#bbb"></p>
 </div>
 
 <div class="card" id="formCard" style="display:none">
@@ -313,10 +315,15 @@ async function intentarSesionExistente() {
   }
 }
 
-function mostrarErrorLogin(mensaje) {
+// conSalida = true → ofrecer "abrir en el navegador". Solo tiene sentido dentro de Teams
+// (fuera de Teams el usuario ya está en un navegador y el enlace no aporta nada).
+function mostrarErrorLogin(mensaje, conSalida) {
   const el = document.getElementById("loginError");
   el.style.display = "block";
   el.textContent = mensaje;
+  document.getElementById("bloqueEscape").style.display = (conSalida && dentroDeTeams) ? "block" : "none";
+  // El diagnóstico acompaña al error para que quien reporte pueda copiarlo
+  document.getElementById("diag").style.display = "block";
 }
 
 function setDiag(texto) {
@@ -353,7 +360,7 @@ window.onload = async () => {
       }
     }
   } catch (e) {
-    mostrarErrorLogin("Error al preparar el inicio de sesión: " + (e.message || e));
+    mostrarErrorLogin("Error al preparar el inicio de sesión: " + (e.message || e), true);
   }
 };
 
@@ -385,7 +392,7 @@ async function login() {
     try {
       await loginConTeams();
     } catch (e) {
-      mostrarErrorLogin("La ventana de Teams no completó el inicio de sesión (" + (e.message || e) + "). Usa el enlace de abajo para abrirlo en el navegador.");
+      mostrarErrorLogin("No se pudo completar el inicio de sesión (" + (e.message || e) + "). Intenta de nuevo; si sigue fallando, puedes abrirlo en el navegador.", true);
     }
     return;
   }
