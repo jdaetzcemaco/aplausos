@@ -287,6 +287,17 @@ async function intentarSesionExistente() {
   try {
     const instance = getMsalInstance();
     await instance.initialize();
+
+    // Si volvemos de loginRedirect (login fuera de Teams), MSAL trae la sesión en la URL
+    // y hay que procesarla antes de consultar las cuentas guardadas.
+    const retorno = await instance.handleRedirectPromise();
+    if (retorno && retorno.account) {
+      currentAccount = retorno.account;
+      accessToken = retorno.accessToken;
+      mostrarFormulario();
+      return true;
+    }
+
     const accounts = instance.getAllAccounts();
     if (accounts.length === 0) return false;
     currentAccount = accounts[0];
@@ -367,28 +378,27 @@ async function loginConTeams() {
 async function login() {
   document.getElementById("loginError").style.display = "none";
 
-  // Si el SDK de Teams está disponible, usar su ventana de autenticación
-  // (Teams bloquea los popups normales del navegador)
-  if (typeof microsoftTeams !== "undefined") {
+  // Dentro de una pestaña de Teams (Teams inicializó de verdad): usar su ventana de
+  // autenticación, porque Teams bloquea los popups normales del navegador.
+  // OJO: no basta con que el SDK haya cargado; hay que haber inicializado Teams con éxito.
+  if (dentroDeTeams) {
     try {
       await loginConTeams();
-      return;
     } catch (e) {
       mostrarErrorLogin("La ventana de Teams no completó el inicio de sesión (" + (e.message || e) + "). Usa el enlace de abajo para abrirlo en el navegador.");
-      return;
     }
+    return;
   }
 
-  // Fuera de Teams: popup normal del navegador
+  // Fuera de Teams (navegador, enlace compartido, navegador interno del celular):
+  // redirección completa en vez de popup. Los popups fallan seguido en celulares y en
+  // navegadores internos; al volver, window.onload recoge la sesión con handleRedirectPromise.
   try {
     const instance = getMsalInstance();
     await instance.initialize();
-    const result = await instance.loginPopup({ scopes: ["User.Read.All"] });
-    currentAccount = result.account;
-    await getToken();
-    mostrarFormulario();
+    await instance.loginRedirect({ scopes: ["User.Read.All"] });
   } catch (e) {
-    mostrarErrorLogin("No se pudo iniciar sesión: " + (e.message || e) + ". Usa el enlace de abajo para abrirlo en el navegador.");
+    mostrarErrorLogin("No se pudo iniciar sesión: " + (e.message || e));
   }
 }
 
