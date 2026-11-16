@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>Diagnóstico de jefes — Cemaco</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<style>
+  :root {
+    --azul:#101E8E; --verde:#94D500; --fondo:#F4F6FC; --borde:#E2E6F3;
+    --texto:#1B2340; --suave:#5B6385; --rojo:#E8372A; --ambar:#E89B00;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:var(--fondo); color:var(--texto); padding:24px 16px 48px; }
+  .wrap { max-width:1040px; margin:0 auto; }
+  h1 { color:var(--azul); font-size:22px; margin-bottom:4px; }
+  .sub { color:var(--suave); font-size:13.5px; margin-bottom:20px; }
+  .card { background:#fff; border:1px solid var(--borde); border-radius:12px; padding:18px; margin-bottom:16px; }
+  .card h2 { font-size:15px; color:var(--azul); margin-bottom:10px; }
+  .kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { background:#fff; border:1px solid var(--borde); border-radius:12px; padding:14px; }
+  .kpi .n { font-size:26px; font-weight:700; color:var(--azul); font-variant-numeric:tabular-nums; }
+  .kpi .l { font-size:12.5px; color:var(--suave); margin-top:2px; }
+  .kpi .bar { height:6px; background:#EDF0FA; border-radius:3px; margin-top:8px; overflow:hidden; }
+  .kpi .bar i { display:block; height:100%; background:var(--verde); }
+  button { background:var(--azul); color:#fff; border:0; border-radius:8px; padding:10px 16px; font-weight:600; font-size:14px; cursor:pointer; }
+  button.sec { background:#fff; color:var(--azul); border:1px solid var(--azul); }
+  button:disabled { opacity:.5; cursor:default; }
+  #estado { font-size:13.5px; color:var(--suave); margin-top:10px; }
+  .err { color:var(--rojo) !important; font-weight:600; }
+  .tablewrap { overflow-x:auto; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--borde); white-space:nowrap; }
+  th { color:var(--suave); font-weight:600; font-size:12px; position:sticky; top:0; background:#fff; }
+  td.num, th.num { text-align:right; font-variant-numeric:tabular-nums; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11.5px; font-weight:600; }
+  .ok { background:#EAF7D6; color:#3D6B00; } .mal { background:#FDE7E5; color:#B3261E; } .med { background:#FFF2D6; color:#8A5A00; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+  input[type=search] { flex:1; min-width:200px; padding:9px 12px; border:1px solid var(--borde); border-radius:8px; font-size:14px; }
+  .scroll { max-height:420px; overflow:auto; }
+  .yo { font-size:15px; }
+  .yo b { color:var(--azul); }
+  .nota { font-size:12.5px; color:var(--suave); margin-top:8px; line-height:1.5; }
+  #resultado { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Diagnóstico de jefes en Azure AD</h1>
+  <p class="sub">Revisa si cada empleado tiene su jefe inmediato asignado en el directorio de Microsoft, para la futura app de vacaciones. Solo lee; no cambia nada.</p>
+
+  <div class="card" id="inicio">
+    <button id="btnCorrer">Revisar directorio</button>
+    <p id="estado">Usa la sesión de Aplausos de este navegador.</p>
+  </div>
+
+  <div id="resultado">
+    <div class="card yo" id="yo"></div>
+    <div class="kpis" id="kpis"></div>
+
+    <div class="card">
+      <h2>Por departamento</h2>
+      <p class="nota" style="margin:0 0 10px">Ordenado por los que tienen menos jefes asignados. El departamento es el campo de Azure AD tal como está (sucio).</p>
+      <div class="tablewrap scroll"><table id="tDeptos"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>Jefes con cuenta deshabilitada</h2>
+      <p class="nota" style="margin:0 0 10px">Empleados activos cuyo jefe asignado ya no tiene cuenta activa: su solicitud llegaría a nadie.</p>
+      <div class="tablewrap scroll"><table id="tJefesBaja"></table></div>
+    </div>
+
+    <div class="card">
+      <h2>Empleados activos sin jefe asignado</h2>
+      <div class="row">
+        <input type="search" id="filtro" placeholder="Filtrar por nombre, correo o departamento">
+        <button class="sec" id="btnCsv">Descargar CSV completo</button>
+      </div>
+      <div class="tablewrap scroll"><table id="tSinJefe"></table></div>
+      <p class="nota">El CSV trae a todos los empleados activos con su jefe, código de empleado y empresa, para pasarlo a IT o RRHH.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// Misma app de Azure que Aplausos. El caché en localStorage se comparte entre páginas del
+// mismo sitio, así que si ya iniciaste sesión en form.html, aquí entra sin pedir nada.
+const msalConfig = {
+  auth: {
+    clientId: "8e2a17cb-e0dc-4166-998a-96298e04704e",
+    authority: "https://login.microsoftonline.com/7944ce02-7df9-4a4a-97ac-85a2b2f936cb",
+    // form.html ya está registrado como redirect URI; esta página no lo está
+    redirectUri: "https://jdaetzcemaco.github.io/aplausos/form.html"
+  },
+  cache: { cacheLocation: "localStorage" }
+};
+const SCOPES = ["User.Read.All"];
+const FORM_URL = "https://jdaetzcemaco.github.io/aplausos/form.html";
+
+let empleados = [];   // activos, ya normalizados
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
+
+function estado(texto, error) {
+  $("estado").textContent = texto;
+  $("estado").className = error ? "err" : "";
+}
+
+async function obtenerToken() {
+  const app = new msal.PublicClientApplication(msalConfig);
+  await app.initialize();
+  const cuentas = app.getAllAccounts();
+  if (!cuentas.length) throw new Error("SIN_SESION");
+  try {
+    const r = await app.acquireTokenSilent({ scopes: SCOPES, account: cuentas[0] });
+    return { token: r.accessToken, cuenta: cuentas[0] };
+  } catch (e) {
+    throw new Error("SIN_SESION");
+  }
+}
+
+async function leerUsuarios(token) {
+  let url = "https://graph.microsoft.com/v1.0/users?$top=100"
+    + "&$select=id,displayName,mail,userPrincipalName,department,jobTitle,companyName,employeeId,accountEnabled,userType"
+    + "&$expand=manager($select=id,displayName,mail,accountEnabled)";
+  const todos = [];
+  while (url) {
+    const resp = await fetch(url, { headers: { Authorization: "Bearer " + token } });
+    if (!resp.ok) {
+      const cuerpo = await resp.text();
+      throw new Error("Graph respondió " + resp.status + ": " + cuerpo.slice(0, 200));
+    }
+    const data = await resp.json();
+    todos.push(...(data.value || []));
+    estado("Leyendo directorio… " + todos.length + " cuentas");
+    url = data["@odata.nextLink"] || null;
+  }
+  return todos;
+}
+
+function normalizar(u) {
+  const m = u.manager || null;
+  return {
+    nombre: u.displayName || "",
+    correo: (u.mail || u.userPrincipalName || "").toLowerCase(),
+    depto: (u.department || "").trim(),
+    puesto: u.jobTitle || "",
+    empresa: (u.companyName || "").trim(),
+    codigo: (u.employeeId || "").trim(),
+    jefe: m ? (m.displayName || "") : "",
+    jefeCorreo: m ? (m.mail || "").toLowerCase() : "",
+    jefeActivo: m ? m.accountEnabled !== false : null
+  };
+}
+
+function render(cuentasTotales, correoYo) {
+  const n = empleados.length;
+  const conJefe = empleados.filter(e => e.jefe).length;
+  const conCodigo = empleados.filter(e => e.codigo).length;
+  const conEmpresa = empleados.filter(e => e.empresa).length;
+  const conDepto = empleados.filter(e => e.depto).length;
+  const jefeBaja = empleados.filter(e => e.jefe && e.jefeActivo === false);
+
+  // Tu jefe
+  const yo = empleados.find(e => e.correo === (correoYo || "").toLowerCase());
+  $("yo").innerHTML = yo
+    ? (yo.jefe
+        ? `Según Azure AD, tu jefe es <b>${esc(yo.jefe)}</b>${yo.jefeCorreo ? " (" + esc(yo.jefeCorreo) + ")" : ""}.`
+        : `Según Azure AD, <b>no tienes jefe asignado</b>.`)
+      + ` Código de empleado: <b>${esc(yo.codigo || "vacío")}</b> · Empresa: <b>${esc(yo.empresa || "vacía")}</b>`
+    : "No encontré tu cuenta entre las activas.";
+
+  // Indicadores
+  const kpi = (num, total, etiqueta) => `<div class="kpi"><div class="n">${pct(num, total)}%</div>
+    <div class="l">${etiqueta}<br>${num.toLocaleString("es-GT")} de ${total.toLocaleString("es-GT")}</div>
+    <div class="bar"><i style="width:${pct(num, total)}%"></i></div></div>`;
+  $("kpis").innerHTML =
+    `<div class="kpi"><div class="n">${n.toLocaleString("es-GT")}</div><div class="l">Cuentas activas de empleados<br>(de ${cuentasTotales.toLocaleString("es-GT")} en el directorio)</div></div>`
+    + kpi(conJefe, n, "Con jefe asignado")
+    + kpi(conCodigo, n, "Con código de empleado")
+    + kpi(conEmpresa, n, "Con empresa")
+    + kpi(conDepto, n, "Con departamento");
+
+  // Por departamento
+  const grupos = {};
+  for (const e of empleados) {
+    const d = e.depto || "(vacío)";
+    grupos[d] = grupos[d] || { total: 0, con: 0 };
+    grupos[d].total++;
+    if (e.jefe) grupos[d].con++;
+  }
+  const filas = Object.entries(grupos).sort((a, b) =>
+    (a[1].con / a[1].total) - (b[1].con / b[1].total) || b[1].total - a[1].total);
+  $("tDeptos").innerHTML = `<tr><th>Departamento</th><th class="num">Empleados</th><th class="num">Con jefe</th><th class="num">%</th></tr>`
+    + filas.map(([d, g]) => {
+        const p = pct(g.con, g.total);
+        const cls = p >= 90 ? "ok" : p >= 50 ? "med" : "mal";
+        return `<tr><td>${esc(d)}</td><td class="num">${g.total}</td><td class="num">${g.con}</td><td class="num"><span class="pill ${cls}">${p}%</span></td></tr>`;
+      }).join("");
+
+  // Jefes dados de baja
+  $("tJefesBaja").innerHTML = jefeBaja.length
+    ? `<tr><th>Empleado</th><th>Departamento</th><th>Jefe asignado (inactivo)</th></tr>`
+      + jefeBaja.map(e => `<tr><td>${esc(e.nombre)}</td><td>${esc(e.depto)}</td><td>${esc(e.jefe)}</td></tr>`).join("")
+    : `<tr><td>Ninguno 👍</td></tr>`;
+
+  pintarSinJefe("");
+  $("resultado").style.display = "block";
+}
+
+function pintarSinJefe(filtro) {
+  const f = filtro.toLowerCase();
+  const lista = empleados.filter(e => !e.jefe)
+    .filter(e => !f || (e.nombre + " " + e.correo + " " + e.depto).toLowerCase().includes(f))
+    .sort((a, b) => a.depto.localeCompare(b.depto) || a.nombre.localeCompare(b.nombre));
+  $("tSinJefe").innerHTML = `<tr><th>Nombre</th><th>Correo</th><th>Departamento</th><th>Puesto</th></tr>`
+    + (lista.length
+        ? lista.map(e => `<tr><td>${esc(e.nombre)}</td><td>${esc(e.correo)}</td><td>${esc(e.depto)}</td><td>${esc(e.puesto)}</td></tr>`).join("")
+        : `<tr><td colspan="4">Nadie sin jefe${f ? " con ese filtro" : ""}.</td></tr>`);
+}
+
+function descargarCsv() {
+  const cols = ["nombre", "correo", "codigo", "empresa", "depto", "puesto", "jefe", "jefeCorreo", "jefeActivo"];
+  const titulos = ["Nombre", "Correo", "CodigoEmpleado", "Empresa", "Departamento", "Puesto", "Jefe", "CorreoJefe", "JefeActivo"];
+  const celda = v => '"' + String(v ?? "").replace(/"/g, '""') + '"';
+  const lineas = [titulos.join(",")].concat(empleados.map(e => cols.map(c => celda(e[c])).join(",")));
+  const blob = new Blob(["﻿" + lineas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "jefes-azure-ad-" + new Date().toISOString().slice(0, 10) + ".csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function correr() {
+  $("btnCorrer").disabled = true;
+  estado("Obteniendo sesión…");
+  try {
+    const { token, cuenta } = await obtenerToken();
+    const crudos = await leerUsuarios(token);
+    // Empleados reales: cuenta activa, miembro (no invitado) y con correo
+    empleados = crudos
+      .filter(u => u.accountEnabled !== false && u.userType !== "Guest" && (u.mail || "").includes("@"))
+      .map(normalizar);
+    render(crudos.length, cuenta.username);
+    estado("Listo · " + new Date().toLocaleString("es-GT"));
+  } catch (e) {
+    if (e.message === "SIN_SESION") {
+      $("estado").innerHTML = `<span class="err">No hay sesión de Aplausos en este navegador.</span> `
+        + `Abre <a href="${FORM_URL}" target="_blank" rel="noopener">el formulario de Aplausos</a>, inicia sesión y vuelve aquí a presionar el botón.`;
+    } else {
+      estado("Error: " + e.message, true);
+    }
+  } finally {
+    $("btnCorrer").disabled = false;
+  }
+}
+
+$("btnCorrer").onclick = correr;
+$("btnCsv").onclick = descargarCsv;
+$("filtro").addEventListener("input", e => pintarSinJefe(e.target.value));
+</script>
+</body>
+</html>
