@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Solicitud de vacaciones — Cemaco</title>
+<script src="https://cdn.jsdelivr.net/npm/@azure/msal-browser@2.38.3/lib/msal-browser.min.js"></script>
+<script src="https://res.cdn.office.net/teams-js/2.19.0/js/MicrosoftTeams.min.js"></script>
+<script>
+// Respaldo: si el CDN de Microsoft está bloqueado por la red, cargar el SDK de Teams desde jsDelivr
+function cargarTeamsSDK() {
+  return new Promise((resolve) => {
+    if (typeof microsoftTeams !== "undefined") return resolve(true);
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/@microsoft/teams-js@2.19.0/dist/MicrosoftTeams.min.js";
+    s.onload = () => resolve(typeof microsoftTeams !== "undefined");
+    s.onerror = () => resolve(false);
+    document.head.appendChild(s);
+  });
+}
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#f5f5f5; color:#1a1a1a; padding:24px 16px 60px; }
+  .card { background:#fff; max-width:560px; margin:0 auto; border-radius:12px; padding:28px 24px; box-shadow:0 2px 12px rgba(0,0,0,.06); }
+  h1 { font-size:22px; color:#101E8E; margin-bottom:6px; }
+  .subtitle { font-size:13px; color:#777; margin-bottom:8px; }
+  h2 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:#101E8E; margin:26px 0 2px; }
+  label { display:block; font-size:13px; font-weight:700; color:#333; margin:16px 0 6px; }
+  .hint { font-size:12px; color:#888; font-weight:400; margin-top:4px; }
+  select, textarea, input[type=text], input[type=date], input[type=number] {
+    width:100%; padding:11px 12px; border:1px solid #ddd; border-radius:8px; font-size:14px; font-family:inherit; background:#fafafa;
+  }
+  input[readonly] { background:#f0f0f0; color:#555; }
+  textarea { resize:vertical; min-height:80px; }
+  .dos { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .dos label { margin-top:16px; }
+  @media (max-width:420px) { .dos { grid-template-columns:1fr; gap:0; } }
+  .search-wrap { position:relative; }
+  #jefeResultados { position:absolute; top:calc(100% + 4px); left:0; right:0; background:#fff; border:1px solid #ddd; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10; box-shadow:0 4px 14px rgba(0,0,0,.1); display:none; }
+  #jefeResultados.show { display:block; }
+  .resultado-item { padding:10px 12px; cursor:pointer; font-size:13.5px; border-bottom:1px solid #f0f0f0; }
+  .resultado-item:last-child { border-bottom:none; }
+  .resultado-item:hover { background:#EEF3FB; }
+  .resultado-item .dept { color:#999; font-size:11.5px; }
+  #jefeSeleccionado { margin-top:8px; background:#EEF3FB; border:1px solid #101E8E; border-radius:8px; padding:10px 12px; font-size:13.5px; display:none; align-items:center; justify-content:space-between; gap:8px; }
+  #jefeSeleccionado.show { display:flex; }
+  #jefeSeleccionado button { background:none; border:none; color:#E8372A; font-weight:700; cursor:pointer; font-size:13px; }
+  #resumen { margin-top:14px; border-radius:10px; padding:14px; font-size:13.5px; line-height:1.6; display:none; }
+  #resumen.ok { display:block; background:#F1F8E6; border:1px solid #94D500; }
+  #resumen.err { display:block; background:#FDECEA; border:1px solid #E8372A; color:#B3261E; font-weight:600; }
+  #resumen .dias { font-size:26px; font-weight:800; color:#101E8E; line-height:1.1; }
+  #resumen .feriados { font-size:12px; color:#666; margin-top:6px; }
+  #btnSubmit { width:100%; margin-top:26px; background:#101E8E; color:#fff; border:none; padding:14px; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; }
+  #btnSubmit:disabled { opacity:.5; cursor:not-allowed; }
+  #status { margin-top:14px; font-size:13px; text-align:center; line-height:1.5; }
+  .status-ok { color:#2E9E4F; font-weight:700; }
+  .status-err { color:#E8372A; font-weight:700; }
+  #exito { display:none; text-align:center; padding:12px 0; }
+  #exito .big { font-size:44px; }
+  #exito h2 { font-size:18px; text-transform:none; letter-spacing:0; margin:10px 0 8px; }
+  #exito p { font-size:14px; color:#444; line-height:1.6; }
+  #exito button { margin-top:20px; background:#fff; color:#101E8E; border:1px solid #101E8E; padding:10px 18px; border-radius:8px; font-weight:700; cursor:pointer; }
+  #loginScreen { max-width:520px; margin:80px auto; text-align:center; }
+  #loginScreen button { background:#101E8E; color:#fff; border:none; padding:12px 28px; border-radius:8px; font-size:14px; font-weight:700; cursor:pointer; margin-top:16px; }
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <h1>🌴 Solicitud de vacaciones</h1>
+  <p class="subtitle">Inicia sesión con tu cuenta de Cemaco para continuar</p>
+  <button onclick="login()">Iniciar sesión</button>
+  <p id="loginError" style="display:none; color:#E8372A; font-size:13px; font-weight:600; margin-top:14px; line-height:1.5"></p>
+  <p id="bloqueEscape" style="display:none; margin-top:18px; font-size:12.5px; color:#999">
+    ¿No abre la ventana de inicio de sesión?<br>
+    <a href="https://jdaetzcemaco.github.io/aplausos/vacaciones.html" target="_blank" rel="noopener" style="color:#101E8E; font-weight:700">Abrir en el navegador</a>
+  </p>
+  <p id="diag" style="display:none; margin-top:14px; font-size:11px; color:#bbb"></p>
+</div>
+
+<div class="card" id="formCard" style="display:none">
+  <div id="formulario">
+    <h1>🌴 Solicitud de vacaciones</h1>
+    <p class="subtitle">Tu jefe inmediato la recibe en Teams para aprobarla. Cuando responda te llega un correo, y si la aprueba, Recursos Humanos queda notificado.</p>
+
+    <h2>Tus datos</h2>
+    <label>Colaborador</label>
+    <input type="text" id="colaborador" readonly>
+    <div class="dos">
+      <div>
+        <label>Código de empleado *</label>
+        <input type="number" id="codigo" inputmode="numeric" min="1" max="999999" placeholder="Ej. 29449">
+      </div>
+      <div>
+        <label>Empresa *</label>
+        <select id="empresa">
+          <option value="">Selecciona...</option>
+          <option value="NASA">Nuevos Almacenes S. A.</option>
+          <option value="CLIPSA">Clipsa S. A.</option>
+          <option value="XAPSA">Xapsa S. A.</option>
+        </select>
+      </div>
+    </div>
+    <label>Departamento *</label>
+    <select id="departamento"><option value="">Selecciona...</option></select>
+
+    <h2>Tu jefe inmediato</h2>
+    <label>¿Quién autoriza? *</label>
+    <div class="search-wrap">
+      <input type="text" id="jefeBusqueda" placeholder="Escribe su nombre (mínimo 3 letras)" autocomplete="off">
+      <div id="jefeResultados"></div>
+    </div>
+    <div id="jefeSeleccionado">
+      <span id="jefeSeleccionadoTexto"></span>
+      <button onclick="limpiarJefe()">Cambiar</button>
+    </div>
+
+    <h2>Fechas</h2>
+    <div class="dos">
+      <div>
+        <label>Primer día de vacaciones *</label>
+        <input type="date" id="fechaInicio">
+      </div>
+      <div>
+        <label>Día que regresas a trabajar *</label>
+        <input type="date" id="fechaRegreso">
+      </div>
+    </div>
+    <div id="resumen"></div>
+
+    <label>Periodo de referencia *</label>
+    <select id="periodo"></select>
+
+    <label>Observaciones</label>
+    <textarea id="observaciones" placeholder="Opcional"></textarea>
+    <p class="hint">Si tienes días de antigüedad por vacaciones, inclúyelos aquí.</p>
+
+    <button id="btnSubmit" onclick="enviarSolicitud()">Enviar solicitud</button>
+    <div id="status"></div>
+  </div>
+
+  <div id="exito">
+    <div class="big">✅</div>
+    <h2>Solicitud enviada</h2>
+    <p id="exitoTexto"></p>
+    <button onclick="nuevaSolicitud()">Hacer otra solicitud</button>
+  </div>
+</div>
+
+<script>
+// ── Configuración ──
+const POWER_AUTOMATE_URL = "https://default7944ce027df94a4a97ac85a2b2f936.cb.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/9be33446e84641cbafa79ea643896990/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cJGu8K-YowQt1F2ansHwlWO-gEY18SVeOkVjCQ7aKO8";
+const CLAVE_SECRETA = "vacaciones-cemaco-2026";
+
+// Feriados de Guatemala que NO cuentan como día de vacaciones (formato AAAA-MM-DD).
+// Mantener cada año. Sábado y domingo ya se excluyen solos.
+// 24 y 31 de diciembre (medio día) NO están, igual que en el formato de Excel anterior.
+const FERIADOS = {
+  "2026-01-01": "Año Nuevo",       "2026-04-02": "Jueves Santo",   "2026-04-03": "Viernes Santo",
+  "2026-05-01": "Día del Trabajo", "2026-06-30": "Día del Ejército", "2026-08-15": "Feria de la Asunción",
+  "2026-09-15": "Independencia",   "2026-10-20": "Revolución",     "2026-11-01": "Todos los Santos",
+  "2026-12-25": "Navidad",
+  "2027-01-01": "Año Nuevo",       "2027-03-25": "Jueves Santo",   "2027-03-26": "Viernes Santo",
+  "2027-05-01": "Día del Trabajo", "2027-06-30": "Día del Ejército", "2027-08-15": "Feria de la Asunción",
+  "2027-09-15": "Independencia",   "2027-10-20": "Revolución",     "2027-11-01": "Todos los Santos",
+  "2027-12-25": "Navidad",
+  "2028-01-01": "Año Nuevo",       "2028-04-13": "Jueves Santo",   "2028-04-14": "Viernes Santo",
+  "2028-05-01": "Día del Trabajo", "2028-06-30": "Día del Ejército", "2028-08-15": "Feria de la Asunción",
+  "2028-09-15": "Independencia",   "2028-10-20": "Revolución",     "2028-11-01": "Todos los Santos",
+  "2028-12-25": "Navidad"
+};
+
+const DEPARTAMENTOS = [
+  "Auditoría Interna", "Business Intelligence", "Categorías", "Compras Ferretería", "Compras Hogar",
+  "Compras Qbrands", "Contabilidad", "Contraloría", "Control y Prevención", "Finanzas", "Futuro Verde",
+  "Constru CEMACO", "Importaciones", "Informática", "Informática Desarrollo", "Legal", "Logística",
+  "Mercadeo", "Merchandising", "Operaciones", "Presidencia", "Pricing", "Producto",
+  "Proyecto Mejora Continua", "Proyectos", "Recompra", "Recursos Humanos", "Sostenibilidad", "SAE",
+  "Venta en Línea"
+];
+
+// ── MSAL (misma app de Azure que Aplausos) ──
+const msalConfig = {
+  auth: {
+    clientId: "8e2a17cb-e0dc-4166-998a-96298e04704e",
+    authority: "https://login.microsoftonline.com/7944ce02-7df9-4a4a-97ac-85a2b2f936cb",
+    redirectUri: "https://jdaetzcemaco.github.io/aplausos/vacaciones.html"
+  },
+  cache: { cacheLocation: "localStorage" }
+};
+const SCOPES = ["User.Read.All"];
+let msalInstance = null, currentAccount = null, accessToken = null, dentroDeTeams = false;
+let yo = null;            // perfil de Graph del usuario
+let jefe = null;          // { nombre, correo }
+let calculo = null;       // resultado de calcularDias()
+let debounceTimer = null;
+
+function getMsalInstance() {
+  if (typeof msal === "undefined") throw new Error("La librería MSAL no cargó. Verifica tu conexión o si hay un bloqueo de red.");
+  if (!msalInstance) msalInstance = new msal.PublicClientApplication(msalConfig);
+  return msalInstance;
+}
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// Preferencias del navegador (solo comodidad: se recuerdan para la próxima solicitud)
+const PREF = "vacaciones.prefs";
+function leerPrefs() { try { return JSON.parse(localStorage.getItem(PREF)) || {}; } catch (e) { return {}; } }
+function guardarPrefs(p) { try { localStorage.setItem(PREF, JSON.stringify(p)); } catch (e) {} }
+
+// ── Fechas ──
+// Se trabaja con fechas "puras" (sin hora) en UTC para evitar saltos por zona horaria.
+const aFecha = s => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
+const aTexto = f => f.toISOString().slice(0, 10);
+const sumarDias = (f, n) => new Date(f.getTime() + n * 86400000);
+const DIAS_SEM = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+const MESES = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const bonito = f => `${DIAS_SEM[f.getUTCDay()]} ${f.getUTCDate()} ${MESES[f.getUTCMonth()]} ${f.getUTCFullYear()}`;
+const esFinde = f => f.getUTCDay() === 0 || f.getUTCDay() === 6;
+const esLaboral = f => !esFinde(f) && !FERIADOS[aTexto(f)];
+
+// Días hábiles desde el primer día hasta el día anterior al regreso (lun–vie, sin feriados)
+function calcularDias(inicioTxt, regresoTxt) {
+  if (!inicioTxt || !regresoTxt) return null;
+  const inicio = aFecha(inicioTxt), regreso = aFecha(regresoTxt);
+  if (regreso <= inicio) return { error: "El día de regreso debe ser después del primer día de vacaciones." };
+  if (!esLaboral(inicio)) return { error: `El primer día (${bonito(inicio)}) no es día hábil. Elige un día laboral.` };
+  if (!esLaboral(regreso)) return { error: `El día de regreso (${bonito(regreso)}) no es día hábil. Normalmente sería el siguiente día laboral.` };
+  const hoy = aFecha(new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }));
+  if (inicio < sumarDias(hoy, -30)) return { error: "El primer día tiene más de 30 días en el pasado. Consulta con Recursos Humanos." };
+  let dias = 0, ultimo = null;
+  const feriadosEnRango = [];
+  for (let f = inicio; f < regreso; f = sumarDias(f, 1)) {
+    const t = aTexto(f);
+    if (esLaboral(f)) { dias++; ultimo = f; }
+    else if (FERIADOS[t] && !esFinde(f)) feriadosEnRango.push(`${FERIADOS[t]} (${f.getUTCDate()} ${MESES[f.getUTCMonth()]})`);
+  }
+  if (dias > 30) return { error: `Son ${dias} días hábiles; revisa las fechas.` };
+  return { inicio, regreso, ultimo, dias, feriadosEnRango, pasado: inicio < hoy };
+}
+
+function pintarResumen() {
+  calculo = calcularDias($("fechaInicio").value, $("fechaRegreso").value);
+  const r = $("resumen");
+  if (!calculo) { r.className = ""; r.innerHTML = ""; return; }
+  if (calculo.error) { r.className = "err"; r.textContent = calculo.error; return; }
+  r.className = "ok";
+  r.innerHTML = `<div class="dias">${calculo.dias} ${calculo.dias === 1 ? "día hábil" : "días hábiles"}</div>
+    Primer día: <b>${bonito(calculo.inicio)}</b><br>
+    Último día: <b>${bonito(calculo.ultimo)}</b><br>
+    Regresas: <b>${bonito(calculo.regreso)}</b>
+    ${calculo.feriadosEnRango.length ? `<div class="feriados">No se descuentan: ${esc(calculo.feriadosEnRango.join(", "))}.</div>` : ""}
+    ${calculo.pasado ? `<div class="feriados">⚠️ La fecha de inicio ya pasó; se registrará igual.</div>` : ""}`;
+}
+
+function llenarPeriodos() {
+  const anio = Number(new Date().toLocaleDateString("en-CA", { timeZone: "America/Guatemala" }).slice(0, 4));
+  const sel = $("periodo");
+  for (let a = anio + 1; a >= anio - 3; a--) {
+    const o = document.createElement("option");
+    o.value = o.textContent = `${a - 1} - ${a}`;
+    sel.appendChild(o);
+  }
+  sel.value = `${anio - 1} - ${anio}`;
+}
+
+// ── Login (mismo patrón probado en Aplausos) ──
+async function intentarSesionExistente() {
+  try {
+    const instance = getMsalInstance();
+    await instance.initialize();
+    const retorno = await instance.handleRedirectPromise();
+    if (retorno && retorno.account) { currentAccount = retorno.account; accessToken = retorno.accessToken; await mostrarFormulario(); return true; }
+    const cuentas = instance.getAllAccounts();
+    if (!cuentas.length) return false;
+    currentAccount = cuentas[0];
+    accessToken = (await instance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount })).accessToken;
+    await mostrarFormulario();
+    return true;
+  } catch (e) { return false; }
+}
+
+function mostrarErrorLogin(mensaje, conSalida) {
+  $("loginError").style.display = "block";
+  $("loginError").textContent = mensaje;
+  $("bloqueEscape").style.display = (conSalida && dentroDeTeams) ? "block" : "none";
+  $("diag").style.display = "block";
+}
+
+window.onload = async () => {
+  try {
+    const sdkOk = await cargarTeamsSDK();
+    let motivo = sdkOk ? "" : "SDK de Teams no cargó (red bloqueada)";
+    if (sdkOk) {
+      try { await microsoftTeams.app.initialize(); await microsoftTeams.app.getContext(); dentroDeTeams = true; }
+      catch (e) { motivo = "no se pudo inicializar Teams: " + (e.message || e); }
+    }
+    $("diag").textContent = dentroDeTeams ? "Modo Teams" : "Modo navegador · " + motivo;
+    if (await intentarSesionExistente()) return;
+    if (dentroDeTeams) {
+      try { await loginConTeams(); }
+      catch (e) { mostrarErrorLogin("No se completó el inicio de sesión: " + (e.message || e) + ". Vuelve a intentar con el botón."); }
+    }
+  } catch (e) {
+    mostrarErrorLogin("Error al preparar el inicio de sesión: " + (e.message || e), true);
+  }
+};
+
+async function loginConTeams() {
+  // auth.html ya está registrada en Azure y guarda la sesión en localStorage (compartido con esta página)
+  await microsoftTeams.authentication.authenticate({ url: "https://jdaetzcemaco.github.io/aplausos/auth.html", width: 600, height: 600 });
+  const instance = getMsalInstance();
+  await instance.initialize();
+  const cuentas = instance.getAllAccounts();
+  if (!cuentas.length) throw new Error("No se recibió la sesión desde Teams.");
+  currentAccount = cuentas[0];
+  await getToken();
+  await mostrarFormulario();
+}
+
+async function login() {
+  $("loginError").style.display = "none";
+  if (dentroDeTeams) {
+    try { await loginConTeams(); }
+    catch (e) { mostrarErrorLogin("No se pudo completar el inicio de sesión (" + (e.message || e) + "). Intenta de nuevo.", true); }
+    return;
+  }
+  try {
+    const instance = getMsalInstance();
+    await instance.initialize();
+    await instance.loginRedirect({ scopes: SCOPES });
+  } catch (e) { mostrarErrorLogin("No se pudo iniciar sesión: " + (e.message || e)); }
+}
+
+async function getToken() {
+  const instance = getMsalInstance();
+  try { accessToken = (await instance.acquireTokenSilent({ scopes: SCOPES, account: currentAccount })).accessToken; }
+  catch (e) { accessToken = (await instance.acquireTokenPopup({ scopes: SCOPES, account: currentAccount })).accessToken; }
+}
+
+async function graph(ruta, extraHeaders) {
+  const r = await fetch("https://graph.microsoft.com/v1.0" + ruta, { headers: { Authorization: "Bearer " + accessToken, ...(extraHeaders || {}) } });
+  if (r.status === 404) return null;
+  if (!r.ok) throw new Error("Graph " + r.status);
+  return r.json();
+}
+
+// ── Formulario ──
+async function mostrarFormulario() {
+  $("loginScreen").style.display = "none";
+  $("formCard").style.display = "block";
+
+  const dep = $("departamento");
+  DEPARTAMENTOS.forEach(d => { const o = document.createElement("option"); o.value = o.textContent = d; dep.appendChild(o); });
+  llenarPeriodos();
+
+  // Perfil propio
+  try { yo = await graph("/me?$select=displayName,mail,userPrincipalName,department,employeeId"); } catch (e) { yo = null; }
+  const nombre = (yo && yo.displayName) || currentAccount.name;
+  const correo = ((yo && (yo.mail || yo.userPrincipalName)) || currentAccount.username).toLowerCase();
+  yo = { nombre, correo, employeeId: yo && yo.employeeId };
+  $("colaborador").value = `${nombre} · ${correo}`;
+
+  // Lo que la persona llenó la vez pasada en este navegador
+  const p = leerPrefs();
+  if (p.codigo) $("codigo").value = p.codigo; else if (yo.employeeId) $("codigo").value = yo.employeeId;
+  if (p.empresa) $("empresa").value = p.empresa;
+  if (p.departamento) $("departamento").value = p.departamento;
+
+  // Jefe: primero Azure AD; si no está asignado, el último que eligió; si no, buscador
+  let jefeAzure = null;
+  try { jefeAzure = await graph("/me/manager?$select=displayName,mail"); } catch (e) {}
+  if (jefeAzure && jefeAzure.mail) seleccionarJefe({ nombre: jefeAzure.displayName, correo: jefeAzure.mail }, "según Azure AD");
+  else if (p.jefe && p.jefe.correo) seleccionarJefe(p.jefe, "la última vez");
+
+  $("jefeBusqueda").addEventListener("input", e => {
+    clearTimeout(debounceTimer);
+    const t = e.target.value.trim();
+    if (t.length < 3) { $("jefeResultados").classList.remove("show"); return; }
+    debounceTimer = setTimeout(() => buscarJefe(t), 300);
+  });
+  $("fechaInicio").addEventListener("change", pintarResumen);
+  $("fechaRegreso").addEventListener("change", pintarResumen);
+}
+
+async function buscarJefe(texto) {
+  const div = $("jefeResultados");
+  div.innerHTML = '<div class="resultado-item">Buscando...</div>';
+  div.classList.add("show");
+  try {
+    const search = encodeURIComponent(`"displayName:${texto.replace(/"/g, "")}"`);
+    const data = await graph(`/users?$search=${search}&$select=displayName,mail,department,jobTitle,accountEnabled&$top=15`, { ConsistencyLevel: "eventual" });
+    const lista = ((data && data.value) || []).filter(u => u.accountEnabled !== false && u.mail && u.mail.toLowerCase() !== yo.correo);
+    if (!lista.length) { div.innerHTML = '<div class="resultado-item">Sin resultados</div>'; return; }
+    div.innerHTML = "";
+    lista.forEach(u => {
+      const item = document.createElement("div");
+      item.className = "resultado-item";
+      item.innerHTML = `${esc(u.displayName)}<br><span class="dept">${esc(u.jobTitle || "")}${u.jobTitle && u.department ? " · " : ""}${esc(u.department || "")}</span>`;
+      item.onclick = () => seleccionarJefe({ nombre: u.displayName, correo: u.mail });
+      div.appendChild(item);
+    });
+  } catch (e) {
+    div.innerHTML = '<div class="resultado-item">Error al buscar</div>';
+  }
+}
+
+function seleccionarJefe(j, origen) {
+  jefe = { nombre: j.nombre, correo: j.correo.toLowerCase() };
+  $("jefeBusqueda").value = "";
+  $("jefeResultados").classList.remove("show");
+  $("jefeSeleccionadoTexto").innerHTML = `<b>${esc(jefe.nombre)}</b><br><span style="color:#666;font-size:12px">${esc(jefe.correo)}${origen ? " · " + esc(origen) : ""}</span>`;
+  $("jefeSeleccionado").classList.add("show");
+  $("jefeBusqueda").style.display = "none";
+}
+
+function limpiarJefe() {
+  jefe = null;
+  $("jefeSeleccionado").classList.remove("show");
+  $("jefeBusqueda").style.display = "block";
+  $("jefeBusqueda").focus();
+}
+
+async function enviarSolicitud() {
+  const status = $("status");
+  const codigo = $("codigo").value.trim();
+  const empresa = $("empresa").value;
+  const departamento = $("departamento").value;
+  const faltan = [];
+  if (!/^\d{1,6}$/.test(codigo)) faltan.push("código de empleado");
+  if (!empresa) faltan.push("empresa");
+  if (!departamento) faltan.push("departamento");
+  if (!jefe) faltan.push("jefe inmediato");
+  if (!calculo) faltan.push("fechas");
+  if (faltan.length) { status.innerHTML = `<span class="status-err">Falta: ${faltan.join(", ")}.</span>`; return; }
+  if (calculo.error) { status.innerHTML = `<span class="status-err">${esc(calculo.error)}</span>`; return; }
+  if (jefe.correo === yo.correo) { status.innerHTML = '<span class="status-err">No puedes aprobar tu propia solicitud. Elige a tu jefe inmediato.</span>'; return; }
+
+  const btn = $("btnSubmit");
+  btn.disabled = true;
+  status.textContent = "Enviando...";
+
+  const payload = {
+    clave: CLAVE_SECRETA,
+    colaborador: yo.nombre,
+    correo: yo.correo,
+    codigo,
+    empresa,
+    departamento,
+    periodo: $("periodo").value,
+    fechaInicio: aTexto(calculo.inicio),
+    ultimoDia: aTexto(calculo.ultimo),
+    fechaRegreso: aTexto(calculo.regreso),
+    dias: calculo.dias,
+    observaciones: $("observaciones").value.trim(),
+    jefe: jefe.nombre,
+    correoJefe: jefe.correo
+  };
+
+  try {
+    const resp = await fetch(POWER_AUTOMATE_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    if (!resp.ok) throw new Error("Error " + resp.status);
+    const data = await resp.json().catch(() => ({}));
+    guardarPrefs({ codigo, empresa, departamento, jefe });
+    $("exitoTexto").innerHTML = `Tu solicitud de <b>${calculo.dias} ${calculo.dias === 1 ? "día" : "días"}</b>
+      (${bonito(calculo.inicio)} al ${bonito(calculo.ultimo)}) le llegó a <b>${esc(jefe.nombre)}</b> en Teams.<br>
+      Te avisaremos por correo cuando responda.${data.id ? `<br><span style="color:#999;font-size:12px">Solicitud ${esc(data.id)}</span>` : ""}`;
+    $("formulario").style.display = "none";
+    $("exito").style.display = "block";
+    status.textContent = "";
+  } catch (e) {
+    status.innerHTML = '<span class="status-err">No se pudo enviar. Intenta de nuevo en un momento.</span>';
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function nuevaSolicitud() {
+  $("fechaInicio").value = "";
+  $("fechaRegreso").value = "";
+  $("observaciones").value = "";
+  calculo = null;
+  pintarResumen();
+  $("exito").style.display = "none";
+  $("formulario").style.display = "block";
+}
+</script>
+</body>
+</html>
