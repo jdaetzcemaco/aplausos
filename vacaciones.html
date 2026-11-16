@@ -152,6 +152,10 @@ function cargarTeamsSDK() {
 // ── Configuración ──
 const POWER_AUTOMATE_URL = "https://default7944ce027df94a4a97ac85a2b2f936.cb.environment.api.powerplatform.com:443/powerautomate/automations/direct/cu/15/workflows/9be33446e84641cbafa79ea643896990/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=cJGu8K-YowQt1F2ansHwlWO-gEY18SVeOkVjCQ7aKO8";
 const CLAVE_SECRETA = "vacaciones-cemaco-2026";
+// Cuentas que pueden elegirse a sí mismas como jefe para probar el flujo de punta a punta.
+// Vaciar esta lista antes de abrir la app a toda la organización.
+const PROBADORES = ["juan.daetz@cemaco.com", "jdaetz@cemaco.com"];
+const esProbador = () => yo && PROBADORES.includes(yo.correo);
 
 // Feriados de Guatemala que NO cuentan como día de vacaciones (formato AAAA-MM-DD).
 // Mantener cada año. Sábado y domingo ya se excluyen solos.
@@ -361,6 +365,8 @@ async function mostrarFormulario() {
   const correo = ((yo && (yo.mail || yo.userPrincipalName)) || currentAccount.username).toLowerCase();
   yo = { nombre, correo, employeeId: yo && yo.employeeId };
   $("colaborador").value = `${nombre} · ${correo}`;
+  if (esProbador()) $("jefeBusqueda").insertAdjacentHTML("beforebegin",
+    '<p class="hint" style="margin:-2px 0 8px;color:#B36B00">Modo prueba: tu cuenta puede elegirse a sí misma como jefe.</p>');
 
   // Lo que la persona llenó la vez pasada en este navegador
   const p = leerPrefs();
@@ -391,7 +397,7 @@ async function buscarJefe(texto) {
   try {
     const search = encodeURIComponent(`"displayName:${texto.replace(/"/g, "")}"`);
     const data = await graph(`/users?$search=${search}&$select=displayName,mail,department,jobTitle,accountEnabled&$top=15`, { ConsistencyLevel: "eventual" });
-    const lista = ((data && data.value) || []).filter(u => u.accountEnabled !== false && u.mail && u.mail.toLowerCase() !== yo.correo);
+    const lista = ((data && data.value) || []).filter(u => u.accountEnabled !== false && u.mail && (esProbador() || u.mail.toLowerCase() !== yo.correo));
     if (!lista.length) { div.innerHTML = '<div class="resultado-item">Sin resultados</div>'; return; }
     div.innerHTML = "";
     lista.forEach(u => {
@@ -435,7 +441,7 @@ async function enviarSolicitud() {
   if (!calculo) faltan.push("fechas");
   if (faltan.length) { status.innerHTML = `<span class="status-err">Falta: ${faltan.join(", ")}.</span>`; return; }
   if (calculo.error) { status.innerHTML = `<span class="status-err">${esc(calculo.error)}</span>`; return; }
-  if (jefe.correo === yo.correo) { status.innerHTML = '<span class="status-err">No puedes aprobar tu propia solicitud. Elige a tu jefe inmediato.</span>'; return; }
+  if (jefe.correo === yo.correo && !esProbador()) { status.innerHTML = '<span class="status-err">No puedes aprobar tu propia solicitud. Elige a tu jefe inmediato.</span>'; return; }
 
   const btn = $("btnSubmit");
   btn.disabled = true;
